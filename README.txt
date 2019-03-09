@@ -12,3 +12,7 @@ C:\Projects\Web Compiler> express --view=ejs web-comp
 # Install the dependencies
 C:\Projects\Web Compiler> cd web-comp
 C:\Projects\Web Compiler\web-comp> npm install
+
+
+# Run it yo
+set DEBUG=myapp:* & npm start
