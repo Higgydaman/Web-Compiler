@@ -86,8 +86,8 @@ parser.onmessage = function(e) {
 
     // Mark it in the editor
 
-    
-    //result.setValue(e.data,1);              //1 = moves cursor to end
+
+    result.setValue(e.data,1);              //1 = moves cursor to end
 }
 
 function setupEditor() {
@@ -97,7 +97,8 @@ function setupEditor() {
     editor.setTheme("ace/theme/chaos");
     result.setTheme("ace/theme/cobalt");
     editor.getSession().on('change', function(data) {
-        //console.log(editor.getValue());
+        
+        // This section handles the parser thread. 
         var difference = data.end.row - data.start.row;
         if(difference > 0) {
             console.log("MAIN: Sending message to parser thread.")
@@ -108,6 +109,10 @@ function setupEditor() {
             }
             parser.postMessage(message);
         }
+
+        // This code handles the scanner thread and immediate highlighting.
+        // TODO
+
     });
     editor.focus();
     editor.setOptions({
