@@ -24,58 +24,7 @@
 
 // Some globals that are needed, we assume we have at least 4 threads for now
 const parser = new Worker("/javascripts/parser.js");
-
-class Updater {
-    constructor() {
-        this.start = 0;
-        this.end = 0;
-        this.current = 0;
-        this.previous = 0;
-    }
-
-    update(data) {
-        // See if it was a bulk update
-        console.log(data);
-        var difference = data.end.row - data.start.row;
-        console.log(difference);
-        if(difference == 0) {
-            console.log("MAIN: No change detected.");
-            return;
-        }
-        switch(data.action) {
-            
-            case "insert":
-
-            if(difference == 1) {
-                console.log("MAIN: New line detected.");
-            }
-            else if(difference > 0) {
-                console.log("MAIN: Bulk insert detected.");
-            }
-            else {
-                console.log("MAIN: Unknown insert detected.")
-            }
-            break;
-
-            case "remove":
-
-            if(difference == 1) {
-                console.log("MAIN: Update line detected.");
-            }
-            else if(difference > 0) {
-                console.log("MAIN: Bulk delete detected.");
-            }
-            else {
-                console.log("MAIN: Unknown remove detected.")
-            }
-            break;
-
-            default:
-            console.log("MAIN: An unknown change to the editor has occured.")
-        }
-    }
-
-}
+const scanner = new Worker("/javascripts/scanner.js");
 
 function ready() {
     setupEditor();
@@ -91,7 +40,6 @@ parser.onmessage = function(e) {
 }
 
 function setupEditor() {
-    this.updater = new Updater();
     window.editor = ace.edit("editor");
     window.result = ace.edit("result");
     editor.setTheme("ace/theme/chaos");
@@ -101,13 +49,17 @@ function setupEditor() {
         // This section handles the parser thread. 
         var difference = data.end.row - data.start.row;
         if(difference > 0) {
-            console.log("MAIN: Sending message to parser thread.")
+            //console.log("MAIN: Sending message to parser thread.")
             value = editor.getValue();
             message = {
                 "details": data,
                 "value": value
             }
             parser.postMessage(message);
+        }
+        else {
+            value = editor.getValue();
+            
         }
 
         // This code handles the scanner thread and immediate highlighting.
@@ -118,7 +70,7 @@ function setupEditor() {
     editor.setOptions({
       fontSize: "16pt",
       showLineNumbers: true,
-      showGutter: false,
+      showGutter: true,
       vScrollBarAlwaysVisible:true,
       enableBasicAutocompletion: false, enableLiveAutocompletion: false
     });
@@ -126,12 +78,12 @@ function setupEditor() {
     result.setOptions({
       fontSize: "16pt",
       showLineNumbers: true,
-      showGutter: false,
+      showGutter: true,
       vScrollBarAlwaysVisible:true,
       enableBasicAutocompletion: false, enableLiveAutocompletion: false
     });
-  
-    editor.setShowPrintMargin(false);
+    
+    editor.setShowPrintMargin(true);
     editor.setBehavioursEnabled(false);
 
     editor.setValue(

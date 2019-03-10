@@ -16,3 +16,6 @@ C:\Projects\Web Compiler\web-comp> npm install
 
 # Run it yo
 set DEBUG=myapp:* & npm start
+
+# Kill all the nodes
+taskkill /f /im node.exe
