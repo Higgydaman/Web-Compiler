@@ -34,9 +34,13 @@ parser.onmessage = function(e) {
     // See where the error is
 
     // Mark it in the editor
-
-
-    result.setValue(e.data,1);              //1 = moves cursor to end
+    if(e.data.error.flag == true) {
+        result.setValue(e.data.error.msg,1);
+    }
+    else {
+        //console.log(e.data.tree);
+        result.setValue(e.data.tree);
+    }
 }
 
 function setupEditor() {

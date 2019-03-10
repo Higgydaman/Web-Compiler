@@ -223,6 +223,7 @@ class Scanner {
                                         break;
 
                                         // DECN
+                                        case "GLOBAL":
                                         case "TYPE":
                                         case "VARIABLE":
                                         case "PROCEDURE":
@@ -235,7 +236,9 @@ class Scanner {
                                         break;
 
                                         default:
-                                        this.token_list.push({"type" : "IDEN", "value" : key, "line" : this.line_number});
+                                        this.token_list.push({"type" : "IDEN", "name" : key,"value" : null, "scope" : null, "line" : this.line_number});
+                                        // name  = string value
+                                        // value = value associated // is PROGRAM for the program identifier 
                                 }
                         }
                 }
@@ -357,17 +360,93 @@ var lexer = new Scanner();
 class Parser {
         constructor() {
                 this.message = null;
+                this.token_index = 0;
+                this.error = {
+                        "flag"  : false,
+                        "msg"   : "",
+                        "line"  : 0
+                }
+                this.tree = " ";
+
         }
 
         update() {
                 //console.log("PARSER: Parsing the code.")
-                this.message = lexer.code;
-                for(var i in lexer.token_list) {
-                        console.log(lexer.token_list[i].type);
-                }
+                // message = lexer.code;
+                // for(var i in lexer.token_list) {
+                //         console.log(lexer.token_list[i].type);
+                // }
                 //console.log("PARSER: Parsing completed. Sending message back.")
-                postMessage(this.message);
+                
+                // Check the program structure
+                this.error = {
+                        "flag"  : false,
+                        "msg"   : "",
+                        "line"  : 0
+                }
+                this.parseProg();
+
+                postMessage({"error" : this.error,"tree" : this.tree});
         }
+
+        getToken(scope) {
+                var next = lexer.token_list[this.token_index + 1];
+                if(next != null) {
+                        switch(next.type) {
+                                case "IDEN":
+                                //console.log("Caught identier.");
+                                break;
+                        }
+                        this.token = next;
+                        this.token_index++;
+                }
+                else {
+                        this.token.type = "EOF";
+                }
+                return;
+        }
+
+        markError(message) {
+                this.error.flag = true;
+                this.error.msg  = "ERROR: Line number " + this.token.line + ", " + message;
+                this.error.line = this.token.line;
+                return;
+        }
+
+        parseProg() {
+                this.token_index = -1;
+                this.scope = 0;
+                this.getToken(this.scope);
+                switch(this.token.type) {
+                        
+                        case "PRGM":
+                        switch(this.token.value) {
+                                
+                                case "PROGRAM":
+                                this.getToken(this.scope);
+                                switch(this.token.type) {
+                                        case "IDEN":
+                                        this.tree = "Program name: " + this.token.name + "\n";
+                                        this.token.scope = this.scope;
+                                        this.token.value = "PROGRAM"; 
+                                        break;
+
+                                        default:
+                                        this.markError("Expected an identifier for the program name.")
+                                }
+                                break;
+                                
+                                default:
+                                this.markError("Expected keyword PROGRAM.")
+                        }
+                        break;
+                        
+                        default:
+                        this.markError("Expected keyword PROGRAM.") 
+                }
+        }
+
+
 }
 var parser = new Parser();
 
