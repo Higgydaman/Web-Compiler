@@ -245,6 +245,7 @@ class Scanner {
         getString() {
                 var result =  this.current;
                 var next = this.lookAhead();
+                if(next == null) return result;
                 while(next.match(/^[a-zA-Z0-9_]+$/)) {
                         result = result + next;
                         this.incrimentIndex();

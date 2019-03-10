@@ -59,6 +59,8 @@ function setupEditor() {
         }
         else {
             value = editor.getValue();
+            // var Range = require("ace/range").Range
+            // editor.session.addMarker(new Range(0, 0, 0, 1), 'ace_highlight-marker', 'fullLine');
             
         }
 
