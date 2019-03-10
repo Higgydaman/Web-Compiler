@@ -35,7 +35,12 @@ parser.onmessage = function(e) {
 
     // Mark it in the editor
     if(e.data.error.flag == true) {
-        result.setValue(e.data.error.msg,1);
+        var errors = e.data.error.list;
+        var message = "";
+        for(var i = 0 in errors) {
+            message = message + errors[i].msg;
+        }
+        result.setValue(message,1);
     }
     else {
         //console.log(e.data.tree);

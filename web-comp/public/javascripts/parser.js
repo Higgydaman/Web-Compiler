@@ -363,26 +363,16 @@ class Parser {
                 this.token_index = 0;
                 this.error = {
                         "flag"  : false,
-                        "msg"   : "",
-                        "line"  : 0
+                        "list"  : [{"msg": "","line" : 0}]
                 }
                 this.tree = " ";
 
         }
 
         update() {
-                //console.log("PARSER: Parsing the code.")
-                // message = lexer.code;
-                // for(var i in lexer.token_list) {
-                //         console.log(lexer.token_list[i].type);
-                // }
-                //console.log("PARSER: Parsing completed. Sending message back.")
-                
-                // Check the program structure
                 this.error = {
                         "flag"  : false,
-                        "msg"   : "",
-                        "line"  : 0
+                        "list"  : [{"msg": "","line" : 0}]
                 }
                 this.parseProg();
 
@@ -406,10 +396,27 @@ class Parser {
                 return;
         }
 
+        resetToken(scope) {
+                var next = lexer.token_list[this.token_index - 1];
+                if(next != null) {
+                        switch(next.type) {
+                                case "IDEN":
+                                //console.log("Caught identier.");
+                                break;
+                        }
+                        this.token = next;
+                        this.token_index--;
+                }
+                else {
+                        this.token.type = "EOF";
+                }
+                return;
+        }
+
         markError(message) {
+                message = "ERROR: Line number " + this.token.line + ", " + message + "\n";
                 this.error.flag = true;
-                this.error.msg  = "ERROR: Line number " + this.token.line + ", " + message;
-                this.error.line = this.token.line;
+                this.error.list.push({"msg" : message, "line" :this.token.line});
                 return;
         }
 
@@ -417,6 +424,8 @@ class Parser {
                 this.token_index = -1;
                 this.scope = 0;
                 this.getToken(this.scope);
+
+                // Gen the program head name
                 switch(this.token.type) {
                         
                         case "PRGM":
@@ -425,25 +434,87 @@ class Parser {
                                 case "PROGRAM":
                                 this.getToken(this.scope);
                                 switch(this.token.type) {
+                                        
                                         case "IDEN":
-                                        this.tree = "Program name: " + this.token.name + "\n";
-                                        this.token.scope = this.scope;
-                                        this.token.value = "PROGRAM"; 
+                                        this.genProgramHead();
+                                        this.getToken(this.scope);
+                                        
+                                        switch(this.token.type) {
+                                                
+                                                case "PRGM":
+                                                if(this.token.value != "IS") {
+                                                        this.markError("Expected keyword IS after program name.");
+                                                }
+                                                else {
+                                                        this.parseProgramBody();
+                                                }
+                                                break;
+                                                
+                                                default:
+                                                this.markError("Expected keyword IS after program name.");
+                                        }
                                         break;
 
                                         default:
-                                        this.markError("Expected an identifier for the program name.")
+                                        this.markError("Expected an identifier for the program name.");
                                 }
                                 break;
                                 
                                 default:
-                                this.markError("Expected keyword PROGRAM.")
+                                this.markError("Expected keyword PROGRAM.");
                         }
                         break;
                         
                         default:
-                        this.markError("Expected keyword PROGRAM.") 
+                        this.markError("Expected keyword PROGRAM."); 
                 }
+
+                // Catch an error and make a recovery to a declaration or BEGIN
+                LEFTOFF
+                // if(this.error.flag == true) {
+                //         this.getToken(null);
+                //         var recovering = true;
+                //         while(recovering) {
+                //                 this.getToken(null);
+                //                 switch(this.token.type) {
+                //                         case "DECN":
+                //                         if(this.token.value == "GLOBAL") {
+                //                                 this.resetToken(null);
+                //                                 recovering = false;
+                //                                 break;
+                //                         }
+                                        
+                //                         case "STRT":
+                //                         break;
+                //                         case "EOF":
+                //                         return;
+                //                 } 
+                //         }                 
+                // }
+
+                // Gen the program body
+
+
+
+
+                // Gen the program end
+
+                
+        }
+
+        parseProgramBody() {
+                
+                // Connect the program head to the body
+                
+                return;
+        }
+
+
+        genProgramHead() {
+                this.tree = "Program name: " + this.token.name + "\n";
+                this.token.scope = this.scope;
+                this.token.value = "PROGRAM";
+                return;
         }
 
 
