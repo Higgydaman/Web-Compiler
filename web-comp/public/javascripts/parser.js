@@ -85,9 +85,18 @@ class Scanner {
                 this.current = null;
                 this.letters = /^[A-Za-z]+$/;
 
+                if(this.eof == 0) {
+                        this.token_list.push({
+                                "type"  : "EOF", 
+                                "value" : "EOF", 
+                                "line"  : this.line_number
+                                });
+                        return;
+                }
+
                 while(1) {
                         
-                        if(this.index == this.eof) break;                       // The exit
+                        if(this.index == this.eof)  break;                 
                         if(this.code[this.index] == null) break;                // Why not another for corner case.
                         this.current = this.code[this.index].toUpperCase();     // Put all the inputs as uppercase.
                         this.getToken();                                        // Grab another token
@@ -96,6 +105,8 @@ class Scanner {
                         //if(this.code[index] == '\n') console.log("New line.");
                         //console.log(this.code[index]);
                 }
+
+                //this.sayHI();
         }
 
         // Push the next token on the array.
@@ -241,7 +252,7 @@ class Scanner {
                                         break;
 
                                         default:
-                                        this.token_list.push({"type" : "IDEN", "name" : key,"value" : null, "scope" : null, "line" : this.line_number});
+                                        this.token_list.push({"type" : "IDEN", "name" : key, "line" : this.line_number});
                                         // name  = string value
                                         // value = value associated // is PROGRAM for the program identifier 
                                 }
@@ -318,7 +329,14 @@ class Scanner {
 
         // Standard function to incriment the index
         incrimentIndex() {
-                if((this.index + 1) == this.eof) return true;
+                if((this.index + 1) == this.eof) {
+                        this.token_list.push({
+                                "type"  : "EOF", 
+                                "value" : 'EOF', 
+                                "line"  : this.line_number
+                                });
+                        return true;
+                } 
                 this.index++;
                 this.current = this.code[this.index].toUpperCase();
                 return false;
@@ -359,6 +377,13 @@ class Scanner {
                 //console.log("LEXER: Deleting many.")
                 this.scanCode();
         }
+
+        sayHI() {
+                console.log("Lexer syas HI!");
+                for(var i in this.token_list) {
+                        console.log(this.token_list[i].type);
+                } 
+        }
 }
 var lexer = new Scanner();
 
@@ -371,7 +396,10 @@ class Parser {
                         "list"  : [{"msg": "","line" : 0}]
                 }
                 this.tree = " ";
-
+                this.token = null;
+                this.next = null;
+                this.symbol = null;
+                this.symbol_table = [];
         }
 
         update() {
@@ -380,42 +408,275 @@ class Parser {
                         "list"  : [{"msg": "","line" : 0}]
                 }
                 this.parseProg();
-
                 postMessage({"error" : this.error,"tree" : this.tree});
         }
 
-        getToken(scope) {
-                var next = lexer.token_list[this.token_index + 1];
-                if(next != null) {
-                        switch(next.type) {
-                                case "IDEN":
-                                //console.log("Caught identier.");
-                                break;
+        lookAhead() {
+
+                if(this.token != null) {
+                        if(this.token.type == "EOF") {          // If the token is already EOF
+                                this.next = this.token;         // Just set the next to EOF to keep up error generation
+                                return false;                   // and return for no error. it is just EOF 
                         }
-                        this.token = next;
-                        this.token_index++;
                 }
-                else {
-                        this.token.type = "EOF";
-                }
-                return;
+
+                this.next = lexer.token_list[this.index + 1];
+
+                if(this.next == null) return true;      // If the next is null then yes, an error has occured.
+
+                return false;                           // Else pass back no error
         }
 
-        resetToken(scope) {
-                var next = lexer.token_list[this.token_index - 1];
-                if(next != null) {
-                        switch(next.type) {
-                                case "IDEN":
-                                //console.log("Caught identier.");
-                                break;
+        getToken(symbol_name) {
+                
+                if(this.token != null) {
+                        if(this.token.type == "EOF") {          // If the token is already EOF
+                                return false;                   // and return for no error. it is just EOF 
                         }
-                        this.token = next;
-                        this.token_index--;
                 }
-                else {
-                        this.token.type = "EOF";
+                
+                this.token = lexer.token_list[this.index + 1];
+
+                if(this.token == null) return true;     // If the next is null then yes, an error has occured.
+
+                if(this.token.type == "IDEN") {     // Handle symbol table junk
+                        if(this.symbol_table[this.token.value] == null) {
+                                if(symbol_name != null) {
+                                        this.symbol_table.push(symbol_name);
+                                        this.symbol_table[symbol_name] = {
+                                                "type" : null,
+                                                "value": null,
+                                                "scope": this.scope
+                                        } 
+                                }
+                                else {
+                                        this.symbol_table.push(this.token.value);
+                                        this.symbol_table[this.token.value] = {
+                                                "type" : null,
+                                                "value": null,
+                                                "scope": this.scope
+                                        } 
+                                }
+
+                        }
                 }
-                return;
+
+                this.index++;
+                return false;                           // Else pass back no error
+        }
+
+        // Pass in two token types to see if you can recover onto them
+        recover(tok1,tok2,tok3) {
+                while(1) {
+                        if(this.lookAhead()) return true; // grab the next
+                        
+                        switch(this.next.type) {
+                                case tok1:                      // tok1?
+                                case tok2:                      // tok2?
+                                case tok3:                      // tok2?
+                                        return false;           // Return to that position
+                                case "EOF":
+                                        return true;            // Return error
+                                default:
+                                        if(this.getToken()) return true;  // Update the current token
+                        }     
+                }
+        }
+
+        getProgramName() {
+                this.lookAhead();               // Perform a lookahead
+                switch(this.next.type) {
+                        case "IDEN":
+                                this.scope = -1;                                        // Set the scope to RESERVED
+                                this.getToken("PROGRAM");                               // Grab one of dem tokens & update the symbol_table
+                                this.symbol_table["PROGRAM"].type = "RESERVED";         // Set the type to reserved
+                                this.symbol_table["PROGRAM"].value = this.token.value;  // set the value to the identifier specified    
+                                return false;             // Mark successful
+                        default:
+                                return true;              // Mark the error
+                        
+                }
+        }
+
+        parseProg() {
+                
+                // Parse is a recursive decent LL(1).
+                // Parse the program definition
+                this.index = -1;
+                this.scope = -1;
+
+                if(this.lookAhead()) return;    // Perform a lookahead
+                switch(this.next.value) {       // Look for FIRST
+                        case "PROGRAM":
+                                if(this.getToken()) return;                             // Grab the PRGM token
+                                if(this.getProgramName()) {                             // Grabs the program name, stores it as an identifier for global scope
+                                        this.markError("Expected a PROGRAM declaration.");   // Mark the error
+                                        if(this.recover("PRGM","STRT","END")) return;   // If recovery fails, lets just exit
+                                }
+                        break;
+                        default:
+                                this.markError("Expected PROGRAM keyword.");            // Mark the error  
+                                if(this.recover("PRGM","STRT","END")) return;           // Try to do some recovery if PROGRAM is not found
+                }
+
+
+
+                // this.getToken();
+
+                // // Gen the program head name
+                // switch(this.token.type) {
+                        
+                //         case "PRGM":
+                //         switch(this.token.value) {
+                                
+                //                 case "PROGRAM":
+                //                 this.getToken(this.scope);
+                //                 switch(this.token.type) {
+                                        
+                //                         case "IDEN":
+                //                         this.genProgramHead();
+                //                         this.getToken(this.scope);
+                                        
+                //                         switch(this.token.type) {
+                                                
+                //                                 case "PRGM":
+                //                                 if(this.token.value != "IS") {
+                //                                         this.markError("Expected keyword IS after program name.");
+                //                                 }
+                //                                 break;
+                //                                 default:
+                //                                 this.markError("Expected keyword IS after program name.");
+                //                         }
+                //                         break;
+
+                //                         default:
+                //                         this.markError("Expected an identifier for the program name.");
+                //                 }
+                //                 break;
+                                
+                //                 default:
+                //                 this.markError("Expected keyword PROGRAM.");
+                //         }
+                //         break;
+                        
+                //         default:
+                //         this.markError("Expected keyword PROGRAM."); 
+                // }
+
+                // // Catch an error and make a recovery to a declaration or BEGIN
+                // if(this.error.flag == true) {
+                //         this.getToken(null);
+                //         var recovering = true;
+                //         while(recovering) {
+                //                 this.getToken(null);
+                //                 switch(this.token.type) {
+                //                         case "DECN":
+                //                         if(this.token.value == "GLOBAL") {
+                //                                 this.resetToken(null);
+                //                                 recovering = false;
+                //                                 break;
+                //                         }
+                                        
+                //                         case "STRT":
+                //                         if(this.token.value == "BEGIN") {
+                //                                 this.resetToken(null);
+                //                                 recovering = false;
+                //                                 break;
+                //                         }
+                //                         break;
+
+                //                         case "EOF":
+                //                         recovering = false;
+                //                         return;
+                //                         break;
+                //                 } 
+                //         }                 
+                // }
+
+                // // Gen the program gloabal declarations
+                // this.scope = 0;
+                // var collecting = true;
+                // while(collecting) {
+                //         this.getToken(this.scope);
+                //         switch(this.current.type) {
+                //                 case "DECN":
+                //                 if(this.current.value == "GLOBAL") {
+                //                         this.getDeclaration();
+                //                         break;
+                //                 }
+                //                 break;
+                //                 case "STRT":
+                //                 if(this.current.value == "BEGIN") {
+                //                         building = false;
+                //                         break;
+                //                 }
+                //                 break;
+                //                 default:
+                //                 markError("Expected keyword BEGIN or GLOBAL declaration.");
+                //                 building = false;
+                //                 return;
+                //         }
+                // }
+
+                // // Do some error recovery here to the point of the next statement or END PROGRAM
+                  
+                // // Gen the program end
+                // this.scope = 1;
+                // collecting = true;
+                // while(collecting) {
+                //         this.getToken(this.scope);
+                //         switch(this.current.type) {
+                //                 case "IDEN":
+                //                 // TODO
+                //                 break;
+                                
+                //                 case "COND": // IF ELSE
+                //                 // TODO
+                //                 break;
+
+                //                 case "LOOP": // FOR
+                //                 // TODO
+                //                 break;
+                                
+                //                 case "GOTO": // RETURN
+                //                 // TODO
+                //                 break;
+
+                //                 case "END":  // 
+                //                 if(this.current.value == "END") {
+                //                         this.getToken(this.scope);
+                //                         switch(this.current.type) {
+                //                                 case "PRGM":
+                //                                 if(this.current.value == "PROGRAM") {
+                //                                         this.tree = this.tree + "END PROGRAM";
+                //                                         break;
+                //                                 }
+                //                                 default:
+                //                                 markError("Expected keyword PROGRAM after END.");
+                //                         }
+                //                         collecting = false;
+                //                         break;
+                //                 }
+                //                 break;
+                //                 default:
+                //                 markError("Expected END PROGRAM.");
+                //                 collecting = false;
+                //                 return;
+                //         }
+                // }
+
+                // // Catch the period I guess?
+                // this.getToken(null);
+                // switch(this.token.type) {
+                //         case "END":
+                //         if(this.token.value == ".") {
+                //                 this.tree = this.tree + '.';
+                //                 break;
+                //         }
+                //         default:
+                //         this.markError("Expected period to mark program end.");
+                // } 
+                
         }
 
         markError(message) {
@@ -423,167 +684,6 @@ class Parser {
                 this.error.flag = true;
                 this.error.list.push({"msg" : message, "line" :this.token.line});
                 return;
-        }
-
-        parseProg() {
-                this.token_index = -1;
-                this.scope = 0;
-                this.getToken(this.scope);
-
-                // Gen the program head name
-                switch(this.token.type) {
-                        
-                        case "PRGM":
-                        switch(this.token.value) {
-                                
-                                case "PROGRAM":
-                                this.getToken(this.scope);
-                                switch(this.token.type) {
-                                        
-                                        case "IDEN":
-                                        this.genProgramHead();
-                                        this.getToken(this.scope);
-                                        
-                                        switch(this.token.type) {
-                                                
-                                                case "PRGM":
-                                                if(this.token.value != "IS") {
-                                                        this.markError("Expected keyword IS after program name.");
-                                                }
-                                                break;
-                                                default:
-                                                this.markError("Expected keyword IS after program name.");
-                                        }
-                                        break;
-
-                                        default:
-                                        this.markError("Expected an identifier for the program name.");
-                                }
-                                break;
-                                
-                                default:
-                                this.markError("Expected keyword PROGRAM.");
-                        }
-                        break;
-                        
-                        default:
-                        this.markError("Expected keyword PROGRAM."); 
-                }
-
-                // Catch an error and make a recovery to a declaration or BEGIN
-                if(this.error.flag == true) {
-                        this.getToken(null);
-                        var recovering = true;
-                        while(recovering) {
-                                this.getToken(null);
-                                switch(this.token.type) {
-                                        case "DECN":
-                                        if(this.token.value == "GLOBAL") {
-                                                this.resetToken(null);
-                                                recovering = false;
-                                                break;
-                                        }
-                                        
-                                        case "STRT":
-                                        if(this.token.value == "BEGIN") {
-                                                this.resetToken(null);
-                                                recovering = false;
-                                                break;
-                                        }
-                                        break;
-
-                                        case "EOF":
-                                        recovering = false;
-                                        return;
-                                        break;
-                                } 
-                        }                 
-                }
-
-                // Gen the program gloabal declarations
-                this.scope = 0;
-                var collecting = true;
-                while(collecting) {
-                        this.getToken(this.scope);
-                        switch(this.current.type) {
-                                case "DECN":
-                                if(this.current.value == "GLOBAL") {
-                                        this.getDeclaration();
-                                        break;
-                                }
-                                break;
-                                case "STRT":
-                                if(this.current.value == "BEGIN") {
-                                        building = false;
-                                        break;
-                                }
-                                break;
-                                default:
-                                markError("Expected keyword BEGIN or GLOBAL declaration.");
-                                building = false;
-                                return;
-                        }
-                }
-
-                // Do some error recovery here to the point of the next statement or END PROGRAM
-                  
-                // Gen the program end
-                this.scope = 1;
-                collecting = true;
-                while(collecting) {
-                        this.getToken(this.scope);
-                        switch(this.current.type) {
-                                case "IDEN":
-                                // TODO
-                                break;
-                                
-                                case "COND": // IF ELSE
-                                // TODO
-                                break;
-
-                                case "LOOP": // FOR
-                                // TODO
-                                break;
-                                
-                                case "GOTO": // RETURN
-                                // TODO
-                                break;
-
-                                case "END":  // 
-                                if(this.current.value == "END") {
-                                        this.getToken(this.scope);
-                                        switch(this.current.type) {
-                                                case "PRGM":
-                                                if(this.current.value == "PROGRAM") {
-                                                        this.tree = this.tree + "END PROGRAM";
-                                                        break;
-                                                }
-                                                default:
-                                                markError("Expected keyword PROGRAM after END.");
-                                        }
-                                        collecting = false;
-                                        break;
-                                }
-                                break;
-                                default:
-                                markError("Expected END PROGRAM.");
-                                collecting = false;
-                                return;
-                        }
-                }
-
-                // Catch the period I guess?
-                this.getToken(null);
-                switch(this.token.type) {
-                        case "END":
-                        if(this.token.value == ".") {
-                                this.tree = this.tree + '.';
-                                break;
-                        }
-                        default:
-                        this.markError("Expected period to mark program end.");
-                } 
-                
         }
 
         getDeclaration() {
@@ -596,7 +696,6 @@ class Parser {
                 
                 return;
         }
-
 
         genProgramHead() {
                 this.tree = "Program name: " + this.token.name + "\n";
