@@ -1,0 +1,6 @@
+// token_list = [] of tokens
+                                                                             
+token "EOF" = {
+    type : "EOF"
+}   
+

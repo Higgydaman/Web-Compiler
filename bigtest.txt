@@ -1,0 +1,14 @@
+program tester is
+
+global type a is integer;
+global type b is float;
+global type c is bool;
+global type d is string;
+global type e is f;
+global type g is enum { x, y, z };
+
+begin
+
+
+
+end program.

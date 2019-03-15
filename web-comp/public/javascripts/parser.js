@@ -1,5 +1,7 @@
 'use strict'
 
+var 
+
 
 
 class Scanner {
@@ -12,13 +14,10 @@ class Scanner {
     
         update(data) {
             // See if it was a bulk update
-            //console.log(data.details);
             this.details = data.details;
             this.code = data.value;
             var difference = this.details.end.row - this.details.start.row;
-            //console.log(difference);
             if(difference == 0) {
-                //console.log("PARSER: No change detected.");
                 return;
             }
             switch(data.details.action) {
@@ -26,7 +25,6 @@ class Scanner {
                 case "insert":
     
                 if(difference == 1) {
-                        // console.log("PARSER: New line detected.");
                         if(this.end < this.details.end.row) {
                                 this.insertOne();
                                 this.end = this.details.end.row;
@@ -36,7 +34,6 @@ class Scanner {
                         }
                 }
                 else if(difference > 0) {
-                        // console.log("PARSER: Bulk insert detected.");
                         if(this.end < this.details.end.row) {
                                 this.insertMany();
                                 this.end = this.details.end.row;
@@ -46,21 +43,16 @@ class Scanner {
                         }
                 }
                 else {
-                    // console.log("PARSER: Unknown insert detected.")
                 }
                 break;
     
                 case "remove":
     
                 if(difference == 1) {
-                        //console.log("PARSER: Update line detected.");
-                        //console.log(this.details);
                         this.deleteOne();
                         this.end = this.end - 1;
                 }
                 else if(difference > 0) {
-                        //console.log("PARSER: Bulk delete detected.");
-                        //console.log(this.details);
                         this.deleteMany();
                         this.end = this.end - difference;
                 }
@@ -75,11 +67,10 @@ class Scanner {
         }
 
         scanCode() {
-                //console.log("LEXER: Scanning code.");
                 
                 // Declare the pre-init stuff
                 this.eof = this.code.length - 1;
-                this.index = 0;
+                this.index = -1;
                 this.line_number = 0;
                 this.token_list = [];
                 this.current = null;
@@ -95,18 +86,9 @@ class Scanner {
                 }
 
                 while(1) {
-                        
-                        if(this.index == this.eof)  break;                 
-                        if(this.code[this.index] == null) break;                // Why not another for corner case.
-                        this.current = this.code[this.index].toUpperCase();     // Put all the inputs as uppercase.
-                        this.getToken();                                        // Grab another token
-                        if(this.incrimentIndex()) break;                        // Incriment the index
-                        //console.log(current);
-                        //if(this.code[index] == '\n') console.log("New line.");
-                        //console.log(this.code[index]);
+                        if(this.incrimentIndex())       break;     // Incriment the index                
+                        if(this.getToken())             break;     // Grab another token
                 }
-
-                //this.sayHI();
         }
 
         // Push the next token on the array.
@@ -132,7 +114,6 @@ class Scanner {
                         case '/':                               // Possible comment
                         if((next == '/') || (next == '*')) {
                                 if(this.incrimentIndex()) break;
-                                //console.log("LEXER: Caught a comment section.");
                                 this.skipComment();
                                 break;
                         }
@@ -156,6 +137,7 @@ class Scanner {
 
                         // NEXT
                         case ',':
+                        case ':':
                         this.token_list.push({"type" : "NEXT", "value" : this.current, "line" : this.line_number});
                         break;
 
@@ -201,14 +183,12 @@ class Scanner {
                         } 
                         default:
                         if(this.current.match(this.letters)) {
-                                //console.log(this.current);
                                 var key = this.getString();
-                                //console.log(key);
                                 switch(key) {
                                         
                                         // END
                                         case "END":
-                                        this.token_list.push({"type" : "END", "value" : "END", "line" : this.line_number});
+                                        this.token_list.push({"type" : "END", "value" : key, "line" : this.line_number});
                                         break;
                                         
                                         // BEGIN
@@ -281,6 +261,7 @@ class Scanner {
                         while(this.code[this.index] != '\n') {
                                 if(this.incrimentIndex()) break;
                         }
+                        this.line_number++;
                         break;
 
                         case '*':
@@ -302,7 +283,7 @@ class Scanner {
                                                 completed = true;
                                                 break;
                                         }					
-					break;
+				break;
 				case '/' :						        // Maybe another ghost
                                         if(this.lookAhead() == '*') {			        // look ahead
                                                 comment_count++;
@@ -313,7 +294,10 @@ class Scanner {
                                                 completed = true;
                                                 break;
                                         }
-					break;
+                                break;
+                                case "\n":
+                                        this.line_number++;
+                                break;
                                 }
                                 if(this.incrimentIndex()) {			                // Munch another pixel
                                         completed = true;
@@ -331,57 +315,45 @@ class Scanner {
         incrimentIndex() {
                 if((this.index + 1) == this.eof) {
                         this.token_list.push({
-                                "type"  : "EOF", 
-                                "value" : 'EOF', 
-                                "line"  : this.line_number
-                                });
+                                "type"  : "EOF"
+                        });
                         return true;
                 } 
                 this.index++;
                 this.current = this.code[this.index].toUpperCase();
+                this.next = this.code[this.index + 1].toUpperCase();
                 return false;
-        }
-        // Look ahead function
-        lookAhead() {
-                if((this.index + 1) == this.eof) return null;
-                return this.code[this.index + 1].toUpperCase();
         }
 
         // TODO: Make these actually usable, right now they just keep updating the complete lexer.
         insertOne() {
-                //console.log("LEXER: Inserting one.")
                 this.scanCode();
         }
 
         insertMany() {
-                //console.log("LEXER: Inserting many.")
                 this.scanCode();
         }
 
         updateOne() {
-                //console.log("LEXER: Updating one.")
                 this.scanCode();
         }
 
         updateMany() {
-                //console.log("LEXER: Updating many.")
                 this.scanCode();
         }
 
         deleteOne() {
-                //console.log("LEXER: Deleting one.")
                 this.scanCode();
         }
 
         deleteMany() {
-                //console.log("LEXER: Deleting many.")
                 this.scanCode();
         }
 
         sayHI() {
                 console.log("Lexer syas HI!");
                 for(var i in this.token_list) {
-                        console.log(this.token_list[i].type);
+                        console.log(this.token_list[i].type + " " + this.token_list[i].line);
                 } 
         }
 }
@@ -398,8 +370,7 @@ class Parser {
                 this.tree = " ";
                 this.token = null;
                 this.next = null;
-                this.symbol = null;
-                this.symbol_table = [];
+                this.mark = null;
         }
 
         update() {
@@ -411,389 +382,330 @@ class Parser {
                 postMessage({"error" : this.error,"tree" : this.tree});
         }
 
-        lookAhead() {
+        dumpError(caller) {
+                console.log("PARSER: ERROR DUMP FROM " + caller);
+                console.log("Current Token:");
+                console.log(this.token);
+                console.log("Current Index:");
+                console.log(this.index);
+        }
 
-                if(this.token != null) {
-                        if(this.token.type == "EOF") {          // If the token is already EOF
-                                this.next = this.token;         // Just set the next to EOF to keep up error generation
-                                return false;                   // and return for no error. it is just EOF 
-                        }
+        markError(message) {
+                //lexer.sayHI();
+                this.error.flag = true;
+                var line = this.token.line;
+                if(this.next.type != undefined) {
+                        line = this.next.line;
                 }
+                message = "ERROR LINE " + line + ", " + message + "\n";
+                this.error.list.push({"msg" : message, "line" :this.token.line});
+                //this.dumpError("Marker");
+                this.recover();
+                return;
+        }
 
+        getToken() {
+                this.token = lexer.token_list[this.index];
                 this.next = lexer.token_list[this.index + 1];
-
-                if(this.next == null) return true;      // If the next is null then yes, an error has occured.
-
-                return false;                           // Else pass back no error
-        }
-
-        getToken(symbol_name) {
-                
-                if(this.token != null) {
-                        if(this.token.type == "EOF") {          // If the token is already EOF
-                                return false;                   // and return for no error. it is just EOF 
-                        }
-                }
-                
-                this.token = lexer.token_list[this.index + 1];
-
-                if(this.token == null) return true;     // If the next is null then yes, an error has occured.
-
-                if(this.token.type == "IDEN") {     // Handle symbol table junk
-                        if(this.symbol_table[this.token.value] == null) {
-                                if(symbol_name != null) {
-                                        this.symbol_table.push(symbol_name);
-                                        this.symbol_table[symbol_name] = {
-                                                "type" : null,
-                                                "value": null,
-                                                "scope": this.scope
-                                        } 
-                                }
-                                else {
-                                        this.symbol_table.push(this.token.value);
-                                        this.symbol_table[this.token.value] = {
-                                                "type" : null,
-                                                "value": null,
-                                                "scope": this.scope
-                                        } 
-                                }
-
-                        }
-                }
-
-                this.index++;
-                return false;                           // Else pass back no error
-        }
-
-        // Pass in two token types to see if you can recover onto them
-        recover(tok1,tok2,tok3) {
-                while(1) {
-                        if(this.lookAhead()) return true; // grab the next
-                        
-                        switch(this.next.type) {
-                                case tok1:                      // tok1?
-                                case tok2:                      // tok2?
-                                case tok3:                      // tok2?
-                                        return false;           // Return to that position
-                                case "EOF":
-                                        return true;            // Return error
-                                default:
-                                        if(this.getToken()) return true;  // Update the current token
-                        }     
-                }
-        }
-
-        getProgramName() {
-                this.lookAhead();               // Perform a lookahead
-                switch(this.next.type) {
-                        case "IDEN":
-                                this.scope = -1;                                        // Set the scope to RESERVED
-                                this.getToken("PROGRAM");                               // Grab one of dem tokens & update the symbol_table
-                                this.symbol_table["PROGRAM"].type = "RESERVED";         // Set the type to reserved
-                                this.symbol_table["PROGRAM"].value = this.token.value;  // set the value to the identifier specified    
-                                return false;             // Mark successful
-                        default:
-                                return true;              // Mark the error
-                        
+                if(this.program.completed == true && this.token.type != "EOF") {
+                        this.token.type = "EXCP";
+                        this.token.line_number;
                 }
         }
 
         parseProg() {
-                
-                // Parse is a recursive decent LL(1).
-                // Parse the program definition
-                this.index = -1;
-                this.scope = -1;
-
-                if(this.lookAhead()) return;    // Perform a lookahead
-                switch(this.next.value) {       // Look for FIRST
-                        case "PROGRAM":
-                                if(this.getToken()) return;                             // Grab the PRGM token
-                                if(this.getProgramName()) {                             // Grabs the program name, stores it as an identifier for global scope
-                                        this.markError("Expected a PROGRAM declaration.");   // Mark the error
-                                        if(this.recover("PRGM","STRT","END")) return;   // If recovery fails, lets just exit
+                // Grab the program name and declare the program structure
+                this.program = {
+                        "completed"     : false,
+                        "state"         : "INIT",
+                        "name"          : "stupid",
+                        "declarations"  : [],
+                        "statements"    : [],
+                        "symbols"       : []
+                }
+                for(this.index = 0; (lexer.token_list.length - 1); this.index++) {
+                        this.getToken();
+                        switch(this.token.type) {
+                                case "DECN":    // GLOBAL | TYPE | VARIABLE | PROCEDURE | INTEGER | FLOAT | STRING | BOOL | ENUM
+                                if(this.program.state != "DECL") {
+                                        this.markError("declaration not accept before IS or after BEGIN.")
+                                } else {
+                                        switch(this.token.value) {
+                                                case "GLOBAL":
+                                                this.stateDeclaration();
+                                                switch(this.next.type) {
+                                                        case "END":
+                                                        if(this.next.value != ";") {
+                                                                this.recover();
+                                                                this.markError("expected a declaration end ; .");
+                                                        } else {
+                                                                this.incrimentToken();
+                                                        }
+                                                        break;
+                                                        default:
+                                                        this.markError("expected a declaration end ; .");
+                                                }
+                                                break;
+                                                case "TYPE":
+                                                case "VARIABLE":
+                                                case "PROCEDURE":
+                                                case "INTEGER":
+                                                case "FLOAT":
+                                                case "STRING":
+                                                case "BOOL":
+                                                case "ENUM":
+                                                this.markError("GLOBAL keyword expected before declaration.");
+                                                break;
+                                                default:
+                                                this.markError("unsupported declaration type.");
+                                        }
                                 }
+                                break;
+                                case "PRGM":    // PROGRAM | IS
+                                switch(this.token.value) {
+                                        case "PROGRAM":
+                                        if(this.program.state != "INIT") {
+                                                this.markError("Program already declared.");
+                                        } else this.stateProgram();
+                                        break;
+                                        case "IS":
+                                        if(this.program.state == "INIT") {
+                                                this.program.state = "DECL";
+                                        } else this.markError("unexpested IS.");
+                                        break;
+                                        default:
+                                        this.markError(this.token.value + " is unsupported.");
+                                } 
+                                break;
+                                case "STRT":    // BEGIN
+                                switch(this.token.value) {
+                                        case "BEGIN":
+                                        if(this.program.state == "DECL") {
+                                                this.program.state = "STMT";
+                                        }
+                                        else {
+                                                this.program.markError("unexepted BEGIN statement.");
+                                        }
+                                        break;
+                                        default:
+                                        this.markError("unexpected " + this.token.value);
+                                }
+                                break;
+                                case "COND":    // IF | ELSE
+                                if(this.program.state != "STMT") {
+                                        this.markError("BEIGN statement is needed before statements.");
+                                } 
+                                break;
+                                case "GOTO":    // RETURN 
+                                break;
+                                case "LOOP":    // FOR 
+                                break;
+                                case "END":     // . | END | ;
+                                switch(this.token.value) {
+                                        case ".":
+                                        this.program.completed = true;
+                                        console.log(this.program);
+                                        return;
+                                        case "END":
+                                        switch(this.next.value) {
+                                                case "PROGRAM":
+                                                this.program.statements.push("EOF");
+                                                this.incrimentIndex();
+                                                this.getToken();
+                                                break;
+                                                default:
+                                                this.markError(this.next.value + " unexpected.");
+                                        }
+                                        break;
+                                        case ";":
+                                        this.markError(this.token.value + " unexpected.");
+                                        break;
+                                        default:
+                                        this.markError("unsupported.");
+                                }
+                                break;
+                                case "EXCP":
+                                this.markError("Parsing ends at period.");
+                                break;
+                                case "EOF":
+                                console.log(this.program);
+                                return;
+                        }
+                }
+        }
+
+        incrimentIndex() {
+                this.index = this.index + 1;
+        }
+
+        incrimentToken() {
+                this.index = this.index + 1;
+                this.getToken();
+        }
+
+        recover() {
+                var recovering = true;
+                while(recovering) {
+                        switch(this.next.value) {
+                                case ";":
+                                this.incrimentIndex();
+                                case "EOF":
+                                case "GLOBAL":
+                                case "BEGIN":
+                                case ".":
+                                recovering = false;
+                                break;
+                                default:
+                                this.incrimentToken();
+                        }
+                }
+        }
+
+        stateProgram() {
+                switch(this.next.type) {
+                        case "IDEN":
+                        this.incrimentToken();
+                        if(this.program.symbols[this.token.name] == undefined) {
+                                this.program.symbols.push(this.token.name);
+                                this.program.symbols[this.token.name] = {
+                                        "type" : "RESERVED",
+                                        "value": null
+                                }
+                                this.program.name = this.token.name;
+                                return;
+                        }
+                        else {
+                                this.markError("program name is reserved.");
+                                return;
+                        }
+                        default:
+                        this.markError("Expected indentifier for PROGRAM.");
+                        return;
+                }
+        }
+
+        stateDeclaration() {
+                this.incrimentToken();
+                switch(this.token.value) {
+                case "TYPE":
+                switch(this.next.type) {
+                case "IDEN":
+                this.incrimentToken();
+                        if(this.program.declarations[this.token.name] == null) {
+                                var name = this.token.name;
+                                this.program.declarations[name] = {
+                                        "type" : "TYPE",
+                                        "mark" : null,
+                                        "enums": []
+                                }
+                                switch(this.next.value) {
+                                case "IS":
+                                this.incrimentToken();
+                                if(this.stateType()) return;
+                                this.program.declarations[name].mark = this.mark;
+                                if(this.mark == "ENUM") {
+                                        this.program.declarations[name].enums = this.enums;
+                                }
+                                break;
+                                default:
+                                this.markError("expected IS.");
+                                return true;
+                                }
+                        } else {
+                                this.markError("identifier cannot be reused.");
+                                return true;
+                        }
                         break;
                         default:
-                                this.markError("Expected PROGRAM keyword.");            // Mark the error  
-                                if(this.recover("PRGM","STRT","END")) return;           // Try to do some recovery if PROGRAM is not found
+                        this.markError("identifier expected after " + this.next.value);
+                        }
+                        break;
+                        case "VARIABLE":
+                        break;
+                        case "PROCEDURE":
+                        break;
+                        default:
+                        this.markError("unsupported declaration type.");
+                        return;
                 }
-
-
-
-                // this.getToken();
-
-                // // Gen the program head name
-                // switch(this.token.type) {
-                        
-                //         case "PRGM":
-                //         switch(this.token.value) {
-                                
-                //                 case "PROGRAM":
-                //                 this.getToken(this.scope);
-                //                 switch(this.token.type) {
-                                        
-                //                         case "IDEN":
-                //                         this.genProgramHead();
-                //                         this.getToken(this.scope);
-                                        
-                //                         switch(this.token.type) {
-                                                
-                //                                 case "PRGM":
-                //                                 if(this.token.value != "IS") {
-                //                                         this.markError("Expected keyword IS after program name.");
-                //                                 }
-                //                                 break;
-                //                                 default:
-                //                                 this.markError("Expected keyword IS after program name.");
-                //                         }
-                //                         break;
-
-                //                         default:
-                //                         this.markError("Expected an identifier for the program name.");
-                //                 }
-                //                 break;
-                                
-                //                 default:
-                //                 this.markError("Expected keyword PROGRAM.");
-                //         }
-                //         break;
-                        
-                //         default:
-                //         this.markError("Expected keyword PROGRAM."); 
-                // }
-
-                // // Catch an error and make a recovery to a declaration or BEGIN
-                // if(this.error.flag == true) {
-                //         this.getToken(null);
-                //         var recovering = true;
-                //         while(recovering) {
-                //                 this.getToken(null);
-                //                 switch(this.token.type) {
-                //                         case "DECN":
-                //                         if(this.token.value == "GLOBAL") {
-                //                                 this.resetToken(null);
-                //                                 recovering = false;
-                //                                 break;
-                //                         }
-                                        
-                //                         case "STRT":
-                //                         if(this.token.value == "BEGIN") {
-                //                                 this.resetToken(null);
-                //                                 recovering = false;
-                //                                 break;
-                //                         }
-                //                         break;
-
-                //                         case "EOF":
-                //                         recovering = false;
-                //                         return;
-                //                         break;
-                //                 } 
-                //         }                 
-                // }
-
-                // // Gen the program gloabal declarations
-                // this.scope = 0;
-                // var collecting = true;
-                // while(collecting) {
-                //         this.getToken(this.scope);
-                //         switch(this.current.type) {
-                //                 case "DECN":
-                //                 if(this.current.value == "GLOBAL") {
-                //                         this.getDeclaration();
-                //                         break;
-                //                 }
-                //                 break;
-                //                 case "STRT":
-                //                 if(this.current.value == "BEGIN") {
-                //                         building = false;
-                //                         break;
-                //                 }
-                //                 break;
-                //                 default:
-                //                 markError("Expected keyword BEGIN or GLOBAL declaration.");
-                //                 building = false;
-                //                 return;
-                //         }
-                // }
-
-                // // Do some error recovery here to the point of the next statement or END PROGRAM
-                  
-                // // Gen the program end
-                // this.scope = 1;
-                // collecting = true;
-                // while(collecting) {
-                //         this.getToken(this.scope);
-                //         switch(this.current.type) {
-                //                 case "IDEN":
-                //                 // TODO
-                //                 break;
-                                
-                //                 case "COND": // IF ELSE
-                //                 // TODO
-                //                 break;
-
-                //                 case "LOOP": // FOR
-                //                 // TODO
-                //                 break;
-                                
-                //                 case "GOTO": // RETURN
-                //                 // TODO
-                //                 break;
-
-                //                 case "END":  // 
-                //                 if(this.current.value == "END") {
-                //                         this.getToken(this.scope);
-                //                         switch(this.current.type) {
-                //                                 case "PRGM":
-                //                                 if(this.current.value == "PROGRAM") {
-                //                                         this.tree = this.tree + "END PROGRAM";
-                //                                         break;
-                //                                 }
-                //                                 default:
-                //                                 markError("Expected keyword PROGRAM after END.");
-                //                         }
-                //                         collecting = false;
-                //                         break;
-                //                 }
-                //                 break;
-                //                 default:
-                //                 markError("Expected END PROGRAM.");
-                //                 collecting = false;
-                //                 return;
-                //         }
-                // }
-
-                // // Catch the period I guess?
-                // this.getToken(null);
-                // switch(this.token.type) {
-                //         case "END":
-                //         if(this.token.value == ".") {
-                //                 this.tree = this.tree + '.';
-                //                 break;
-                //         }
-                //         default:
-                //         this.markError("Expected period to mark program end.");
-                // } 
-                
         }
 
-        markError(message) {
-                message = "ERROR: Line number " + this.token.line + ", " + message + "\n";
-                this.error.flag = true;
-                this.error.list.push({"msg" : message, "line" :this.token.line});
-                return;
+        stateType() {
+                this.mark = null;
+                switch(this.next.type) {
+                       case "DECN":
+                       switch(this.next.value) {
+                                case "INTEGER":
+                                case "FLOAT":
+                                case "STRING":
+                                case "BOOL":
+                                this.incrimentToken();
+                                this.mark = this.token.value;
+                                return false;
+                                case "ENUM":
+                                this.incrimentToken();
+                                if(this.stateEnum()) return true;
+                                this.mark  = "ENUM";
+                                return false;
+                                break;
+                                default:
+                                this.markError("unexpected declaration type.");
+                                return true;
+                       }
+                       case "IDEN":
+                       this.incrimentToken();
+                       if(this.program.symbols[this.token.name] != undefined) {
+                               this.markError("identifier already used.");
+                               return true;
+                       }
+                       this.mark = this.token.name;
+                       return false;
+                       default:
+                       this.markError("unexpected value recived in state declaration.");
+                       return true;
+                }
         }
 
-        getDeclaration() {
-                // TODO
+        stateEnum() {
+                this.enums = [];
+                var collecting = true;
+                switch(this.next.value) {
+                        case "{":
+                        while(collecting) {
+                                this.incrimentToken();
+                                switch(this.next.type) {
+                                case "IDEN":
+                                if(this.program.symbols[this.next.name] != undefined) {
+                                        this.markError("enum identifier already defined.");
+                                        return true;
+                                }
+                                this.enums.push({"name" : this.next.name});
+                                break;
+                                case "BRKT":
+                                if(this.next.value == "}") {
+                                        this.incrimentToken();
+                                        collecting = false;
+                                        return false;
+                                }
+                                case "NEXT":
+                                if(this.next.value == ",") {
+                                        break;
+                                }
+                                default:
+                                this.markError("expected identifier or ending bracket }.");
+                                return true;
+                                }
+                        }
+                        break;
+                        default:
+                        this.markError("missing bracket {.");
+                        return true;
+                }
         }
-
-        parseProgramBody() {
-                
-                // Connect the program head to the body
-                
-                return;
-        }
-
-        genProgramHead() {
-                this.tree = "Program name: " + this.token.name + "\n";
-                this.token.scope = this.scope;
-                this.token.value = "PROGRAM";
-                return;
-        }
-
-
 }
 var parser = new Parser();
 
 onmessage = function(e) {
-        //var result = e.data;
-        //console.log(e.data);
         lexer.update(e.data);
-        parser.update();
-        //postMessage(result);   
+        parser.update();   
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// var identifier_propeties = {  
-//         value : null,
-//         scope : null
-// }
-
-// var general_properties = {
-//         value : null
-// }
-
-var TokenType  = {
-        IDEN    : 1,    // Any identifier
-        END     : 2,    // Identifies the end of something              ; | . | END
-        STRT    : 3,    // Identifies the start of something            BEGIN 
-        BRKT    : 4,    // Identifies a bracket                         ( | ) | { | } | [ | ]
-        EXOP    : 5,    // Identifies an expressional operator          & | | 
-        NEXT    : 6,    // Identifies the next in a list                , 
-        AROP    : 7,    // Identifies arithmatic operators              - | + | * | / | \ 
-        RLOP    : 8,    // Identifies relational operators              < | <= | > | >= | =< | => | != | =! | ! | == | = | NOT | IS
-        PROG    : 9,    // Identifies a program state                   PROGRAM     
-        COND    : 10,   // Identifies a condiional state                IF | ELSE | RETURN
-        DECN    : 11    // Identifies a declaration                     TYPE | VARIABLE | PROCEDURE | INTEGER | FLOAT | STRING | BOOL | ENUM
-}; 
-
-
-// class SymbolTable {
-//         constructor() {
-//                 this.symbol_table = {};
-//         }
-// }
-
-// class Lexer {
-//         constructor(table, code) {
-//                 this.table = table;
-//                 this.code  = code;
-//                 this.index = 0;
-//                 this.token = null;
-//                 this.completed = false;     
-//         }
-
-//         get completed() {
-//                 return this.completed;
-//         }
-
-//         // Get a token from the code
-//         getToken() {
-//                 getLexeme(this.code[this.index]);
-//         }
-
-//         // Just for debugging
-//         sayHi() {
-//                 console.log("The lexer says HI!");
-//         }
-// }
-
-
-
-
-// // Go through the code until a lexeme is found
-// function findLexeme() {
-
-// }

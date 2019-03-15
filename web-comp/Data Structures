@@ -1,0 +1,164 @@
+this.symbol_table[this.token.value].value = {
+                                        "type_mark"             : null,
+                                        "identifier"            : null,
+                                        "enums"                 : [],
+                                        "parameter_list"        : []
+                                }
+
+this.token_list.push({"type" : "IDEN", "name" : key, "line" : this.line_number});
+
+this.program = {
+                        "name"          : "stupid",
+                        "declarations"  : [],
+                        "statements"    : []
+                }
+
+this.program.symbols[this.token.name] = {
+                                        "type" : "RESERVED",
+                                        "value": null
+                                }
+
+// Edge cases
+                        case '\n':                              // Next line case
+                        this.line_number++;
+                        break;
+                        
+                        // BRKT
+                        case '(':                               // BRKT case
+                        case ')':                               // BRKT case
+                        case '[':                               // BRKT case
+                        case ']':                               // BRKT case
+                        case '{':                               // BRKT case
+                        case '}':                               // BRKT case
+                        this.token_list.push({"type" : "BRKT", "value" : this.current, "line" : this.line_number});             
+                        break;
+                        
+                        // AROP
+                        case '/':                               // Possible comment
+                        if((next == '/') || (next == '*')) {
+                                if(this.incrimentIndex()) break;
+                                //console.log("LEXER: Caught a comment section.");
+                                this.skipComment();
+                                break;
+                        }
+                        case '-':                               // AROP case
+                        case '+':                               // AROP case
+                        case '*':                               // AROP case
+                        this.token_list.push({"type" : "AROP", "value" : this.current, "line" : this.line_number});
+                        break;
+
+                        // END 
+                        case '.':
+                        case ';':
+                        this.token_list.push({"type" : "END", "value" : this.current, "line" : this.line_number});
+                        break;
+
+                        // EXOP
+                        case '&':
+                        case '|':
+                        this.token_list.push({"type" : "EXOP", "value" : this.current, "line" : this.line_number});
+                        break;
+
+                        // NEXT
+                        case ',':
+                        case ':':
+                        this.token_list.push({"type" : "NEXT", "value" : this.current, "line" : this.line_number});
+                        break;
+
+                        // RLOP < | <= | > | >= | =< | => | != | =! | ! | == | =
+                        case '<':
+                        if(next) {
+                                this.token_list.push({"type" : "RLOP", "value" : "<=", "line" : this.line_number});
+                                this.incrimentIndex();
+                                break;   
+                        }
+                        case '>':
+                        if(next == '=') {
+                                this.token_list.push({"type" : "RLOP", "value" : ">=", "line" : this.line_number});
+                                this.incrimentIndex();
+                                break;   
+                        }
+                        case '!':
+                        if(next == '=') {
+                                this.token_list.push({"type" : "RLOP", "value" : "!=", "line" : this.line_number});
+                                this.incrimentIndex();
+                                break;   
+                        }
+                        case '=':
+                        switch(next) {
+                                case '=':
+                                this.token_list.push({"type" : "RLOP", "value" : "==", "line" : this.line_number});
+                                this.incrimentIndex();
+                                break;
+                                case '>':
+                                this.token_list.push({"type" : "RLOP", "value" : ">=", "line" : this.line_number});
+                                this.incrimentIndex();
+                                break;
+                                case '<':
+                                this.token_list.push({"type" : "RLOP", "value" : "<=", "line" : this.line_number});
+                                this.incrimentIndex();
+                                break;
+                                case '!':
+                                this.token_list.push({"type" : "RLOP", "value" : "!=", "line" : this.line_number});
+                                this.incrimentIndex();
+                                break;
+                                default:
+                                this.token_list.push({"type" : "RLOP", "value" : this.current, "line" : this.line_number});
+                        } 
+                        default:
+                        if(this.current.match(this.letters)) {
+                                //console.log(this.current);
+                                var key = this.getString();
+                                //console.log(key);
+                                switch(key) {
+                                        
+                                        // END
+                                        case "END":
+                                        this.token_list.push({"type" : "END", "value" : key, "line" : this.line_number});
+                                        break;
+                                        
+                                        // BEGIN
+                                        case "BEGIN":
+                                        this.token_list.push({"type" : "STRT", "value" : "BEGIN", "line" : this.line_number});
+                                        break;
+
+                                        // PROGRAM
+                                        case "PROGRAM":
+                                        case "IS":
+                                        this.token_list.push({"type" : "PRGM", "value" : key, "line" : this.line_number});
+                                        break;
+
+                                        // COND
+                                        case "IF":
+                                        case "ELSE":
+                                        this.token_list.push({"type" : "COND", "value" : key, "line" : this.line_number});
+                                        break;
+
+                                        // GOTO
+                                        case "RETURN":
+                                        this.token_list.push({"type" : "GOTO", "value" : key, "line" : this.line_number});
+                                        break;
+
+                                        // LOOP
+                                        case "FOR":
+                                        this.token_list.push({"type" : "LOOP", "value" : key, "line" : this.line_number})
+                                        break;
+
+                                        // DECN
+                                        case "GLOBAL":
+                                        case "TYPE":
+                                        case "VARIABLE":
+                                        case "PROCEDURE":
+                                        case "INTEGER":
+                                        case "FLOAT":
+                                        case "STRING":
+                                        case "BOOL":
+                                        case "ENUM":
+                                        this.token_list.push({"type" : "DECN", "value" : key, "line" : this.line_number});
+                                        break;
+
+                                        default:
+                                        this.token_list.push({"type" : "IDEN", "name" : key, "line" : this.line_number});
+                                        // name  = string value
+                                        // value = value associated // is PROGRAM for the program identifier 
+                                }

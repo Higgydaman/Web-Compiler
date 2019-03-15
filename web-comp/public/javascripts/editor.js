@@ -23,28 +23,30 @@
 
 
 // Some globals that are needed, we assume we have at least 4 threads for now
-const parser = new Worker("/javascripts/parser.js");
-const scanner = new Worker("/javascripts/scanner.js");
+const front_end = new Worker("/javascripts/compiler/front.js");
 
 function ready() {
     setupEditor();
 }
 
-parser.onmessage = function(e) {
+front_end.onmessage = function(e) {
     // See where the error is
 
-    // Mark it in the editor
-    if(e.data.error.flag == true) {
-        var errors = e.data.error.list;
-        var message = "";
-        for(var i = 0 in errors) {
-            message = message + errors[i].msg;
+    editor.getSession().clearAnnotations();
+    console.log(e.data);
+    if(e.data.error == true) {
+        var length = e.data.list.length - 1;
+        var i = 0;
+        while(i <= length) {
+            console.log(i);
+            editor.getSession().setAnnotations([{
+                row: e.data.list[i].line,
+                column: 1,
+                text: e.data.list[i].msg,
+                type: "error"
+            }]);
+            i = i + 1;
         }
-        result.setValue(message,1);
-    }
-    else {
-        //console.log(e.data.tree);
-        result.setValue(e.data.tree);
     }
 }
 
@@ -54,27 +56,27 @@ function setupEditor() {
     editor.setTheme("ace/theme/chaos");
     result.setTheme("ace/theme/cobalt");
     editor.getSession().on('change', function(data) {
-        
         // This section handles the parser thread. 
         var difference = data.end.row - data.start.row;
         if(difference > 0) {
-            //console.log("MAIN: Sending message to parser thread.")
             value = editor.getValue();
             message = {
                 "details": data,
                 "value": value
             }
-            parser.postMessage(message);
+            front_end.postMessage(message);
         }
-        else {
-            value = editor.getValue();
-            // var Range = require("ace/range").Range
-            // editor.session.addMarker(new Range(0, 0, 0, 1), 'ace_highlight-marker', 'fullLine');
-            
+        else if(data.action == "insert") {
+            var input = data.lines[0];
+            if((input == " ") || (input == ";") || (input == ".")) {
+                value = editor.getValue();
+                message = {
+                    "details": data,
+                    "value": value
+                }
+                front_end.postMessage(message);
+            }
         }
-
-        // This code handles the scanner thread and immediate highlighting.
-        // TODO
 
     });
     editor.focus();
