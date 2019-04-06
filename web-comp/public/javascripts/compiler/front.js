@@ -1,146 +1,22 @@
 'use strict'
 
-class Lexer {
+class Scanner {
 
         constructor() {
-                this.token_list = [];
                 this.lexeme = null;
                 this.state = null;
+                this.body_declaration = false;
         }
 
         update(data) {
                 // See if it was a bulk update
                 //console.log("Here");
+                this.body_declaration = false;
                 this.details = data.details;
                 this.code = data.value;
                 messanger.clear();
                 this.scanCode();
-                this.buildTokens();
-        }
-
-        // Builds the token list required for the parser. Uses the lexeme list generated.
-        buildTokens() {
-                this.token_list = [];
                 console.log(this.lexeme_list);
-                this.index = this.lexeme_list.length;
-                this.state = "FOOTER";
-
-                // We go backwords by the way
-                while(1) {
-                        if(this.incrimentIndex("BUILDER")) return;
-                        console.log(this.current);
-                        if(this.getToken()) return;
-                        if(this.token != null) {
-                                console.log(this.token);
-                        }  
-                }
-        }
-
-        // Uses the LEXEME list to generate some tokens.
-        getToken() {
-                this.token = null;
-                switch(this.state) {
-                        case "FOOTER":
-                        if(this.stateFooter()) return true;
-                        break;
-                        case "BODY":
-                        if(this.stateBody()) return true;
-                        break;
-                        case "HEADER":
-                        console.log("Exiting premature."); // Just for now
-                        return true;                                    // Just for now
-                        default:
-                        console.log("LEXER ERROR CODE 2.");
-                }
-                return false;
-        }
-
-        // Recovery based on what state you are in.
-        recover() {
-                switch(this.state) {
-
-                        case "FOOTER":
-                        switch(this.next.value) {
-                                case ";":
-                                case "BEGIN":
-                                this.state = "BODY";
-                                return false;
-                                case "IS":
-                                case "PROGRAM":
-                                this.state = "HEADER";
-                                return false;
-                                default:
-                                if(this.incrimentIndex("BUILDER")) return true;
-                                return this.recover();
-                        }
-
-                        case "BODY":
-                        switch(this.next.value) {
-                                case ";":
-                                return false;
-                                case "BEGIN":
-                                return false;
-                                case "IS":
-                                this.state = "HEADER";
-                                return false;
-                                case "PROGRAM":
-                                this.state = "HEADER";
-                                return false;
-                                default:
-                                if(this.incrimentIndex("BUILDER")) return true;
-                                return this.recover();
-                        }
-
-                        case  "HEADER":         // If we error at this point, just leave
-                        return true;
-                }
-                return false;
-        }
-
-        // State to generate the EOF token
-        stateFooter() {
-                switch(this.current.value) {
-                        case ".":
-                        switch(this.next.value) {
-                                case "PROGRAM":
-                                if(this.incrimentIndex("BUILDER")) return true;
-                                switch(this.next.value) {
-                                        case "END":
-                                        if(this.incrimentIndex("BUILDER")) return true;
-                                        this.state = "BODY";
-                                        this.token = {
-                                                "type" : "EOF"
-                                        }
-                                        return false;
-                                }
-                                default:
-                        }
-                        default:
-                        if(this.markError("Expected keywords END PROGRAM (.) .")) return true;
-                        return false;
-                }
-        }
-
-        // State to generate body tokens
-        stateBody() {
-                switch(this.current.value) {
-                        case ";":
-                        if(this.recover()) return true; // Just for now
-                        break;
-                        case "BEGIN":
-                        if(this.recover()) return true; // Just for now
-                        break;
-                        case "IS":
-                        this.state = "HEADER";
-                        break;
-                        case "PROGRAM":
-                        if(this.markError("Expected keyword IS.")) return true;
-                        break;
-                        default:
-                        if(this.markError("Unexpted input.")) return true;
-                        return false;
-                }
-                return false;
         }
 
         markError(message) {
@@ -158,11 +34,11 @@ class Lexer {
                 this.eof = this.code.length - 1;
                 this.index = -1;
                 this.line_number = 0;
-                this.token_list = [];
                 this.lexeme_list = [];
                 this.current = null;
                 this.letters = /^[A-Za-z]+$/;
                 this.numbers = /^[0-9]/;
+                this.parenthesis = /["]/;
 
                 var EOF = false;
                 var EOF = this.incrimentIndex("SCANNER"); 
@@ -170,6 +46,7 @@ class Lexer {
                         EOF = this.getLexeme();
                         EOF = this.incrimentIndex("SCANNER");
                         if(this.lexeme != null) {
+                                // console.log(this.lexeme);
                                 this.lexeme_list.push(this.lexeme);
                         }
                         else if(!EOF) console.log("SCANNER ERROR CODE 0.");
@@ -182,9 +59,13 @@ class Lexer {
                 switch(caller) {
 
                         case "SCANNER":
-                        if((this.index) == (this.eof - 1)) return true;
+                        if((this.index) == (this.eof)) return true;
                         this.index++;
                         this.current = this.code[this.index].toUpperCase();
+                        if((this.index + 1) >= (this.eof)) {
+                                this.next = null;
+                                return false;
+                        }
                         this.next = this.code[this.index + 1].toUpperCase();
                         return false;
 
@@ -197,7 +78,7 @@ class Lexer {
                         return false;
 
                         default:
-                        console.log("LEXER ERROR CODE 1.");
+                        console.log("Scanner ERROR CODE 1.");
                         return true;
                 }
         }
@@ -208,10 +89,10 @@ class Lexer {
                 var result =  this.current;
                 while(this.next.match(/^[a-zA-Z0-9_]+$/)) {
                         result = result + this.next;
-                        if(this.incrimentIndex("SCANNER")) {
+                        if((this.incrimentIndex("SCANNER")) | (this.next == null)) {
                                 this.key = result;
                                 return;
-                        }      
+                        }   
                 }
                 this.key = result;
                 return;
@@ -220,9 +101,11 @@ class Lexer {
         // Reads until a number is built
         getNumber() {
                 this.number = null;
+                var isfloat = false;
                 var result =  this.current;
                 while(this.next.match(/^[0-9.]+$/)) {
                         if(this.next == '.') {
+                                isfloat = true;
                                 result = result + this.next;
                                 if(this.incrimentIndex("SCANNER")) {
                                         this.number = result;
@@ -243,7 +126,12 @@ class Lexer {
                                 return;
                         }      
                 }
-                this.number = result;
+                if(isfloat) {
+                        this.number = parseFloat(result);
+                }
+                else {
+                        this.number = parseInt(result);
+                }
                 return;
         }
 
@@ -292,7 +180,7 @@ class Lexer {
                         }
                         break;
                         default:
-                        console.log("LEXER: Error within comment skip section");
+                        console.log("Scanner: Error within comment skip section");
                 }
         }
 
@@ -305,7 +193,7 @@ class Lexer {
                         case '\n':                              // Next line case
                         this.line_number++;
                         if(this.incrimentIndex("SCANNER")) return true;
-                        return this.getLexeme();                     
+                        return this.getLexeme();   
 
                         // BRKT
                         case '(':                               // BRKT case
@@ -333,10 +221,15 @@ class Lexer {
                         this.value = this.current;
                         break;
 
-                        // END 
+                        // ENDP 
                         case '.':
+                        this.type = "ENDP";
+                        this.value = this.current;
+                        break;
+
+                        // ENDL 
                         case ';':
-                        this.type = "END";
+                        this.type = "ENDL";
                         this.value = this.current;
                         break;
 
@@ -450,8 +343,13 @@ class Lexer {
 
                                         // PROGRAM
                                         case "PROGRAM":
-                                        case "IS":
                                         this.type = "PRGM";
+                                        this.value = this.key;
+                                        break;
+
+                                        // IS
+                                        case "IS":
+                                        this.type = "IS";
                                         this.value = this.key;
                                         break;
 
@@ -500,9 +398,14 @@ class Lexer {
                         } 
                         else if(this.current.match(this.numbers)) {
                                 this.getNumber();
-                                console.log(this.number);
                                 this.type = "NUMB";
                                 this.value = this.number;
+                        }
+                        else if(this.current.match(this.parenthesis)) {
+                                // PRTH
+                                this.getStringToken()        
+                                this.type = "STRG";
+                                this.value = this.string;        
                         }
                         else {
                                 if(this.incrimentIndex("SCANNER")) return true;
@@ -514,8 +417,228 @@ class Lexer {
                 this.lexeme = {"type" : this.type, "value" : this.value, "line" : this.line_number}; 
                 return false; 
         }
+
+        // Grabs a string token
+        getStringToken() {
+                this.string = null;
+                var result = "";
+                if((this.incrimentIndex("SCANNER")) | (this.current == null)) {
+                        this.string = result;
+                        return;
+                }
+                while(!this.current.match(this.parenthesis)) {
+                        result = result + this.current;
+                        if((this.incrimentIndex("SCANNER")) | (this.current == null)) {
+                                this.string = result;
+                                return;
+                        }  
+                }
+                this.string = result;
+                if(this.incrimentIndex("SCANNER")) return true;
+                return;
+        }
+}
+var scanner = new Scanner();
+
+class Lexer {
+
+        constructor () {
+                this.index         = -1;
+                this.token_current = null;
+                this.token_next    = null; 
+        }
+
+        getToken() {
+
+                // End of file check
+                if(this.incrimentIndex()) {
+                        this.token_current = {
+                                "type" : "EOF"
+                        }
+
+                        this.token_next = {
+                                "type" : "EOF"
+                        }
+
+                        return false;
+                }
+
+                // Pass the current LEXEME
+                this.token_current = {
+                        "type" : this.current.type,
+                        "value": this.current.value
+                }
+
+                // Pass the current LEXEME
+                if(this.token_next.type != "EOF") {
+                        this.token_next = {
+                                "type" : this.next.type,
+                                "value": this.next.value
+                        } 
+                }
+                
+                
+                return false;
+        }
+
+        markError(message) {
+                messanger.message = message;
+                messanger.line = this.current.line;
+                messanger.putError();
+        }
+
+        incrimentIndex() {
+                if(this.index == scanner.lexeme_list.length - 1) {
+                        return true;
+                }
+                else {
+                        this.index++;
+                        this.current = scanner.lexeme_list[this.index];
+                        if(this.index >= scanner.lexeme_list.length - 1) {
+                                this.token_next = {
+                                        "type" : "EOF"
+                                }
+                        }
+                        else {
+                                this.next = scanner.lexeme_list[this.index + 1]
+                        }
+                        return false;
+                }
+        }
 }
 var lexer = new Lexer();
+
+class Parser {
+
+        // Build Program
+        buildPorgram() {
+                lexer.index         = -1;
+                lexer.token_current = null;
+                lexer.token_next    = null;
+                this.symbol_table   = [];
+                this.state          = null;
+                while(1) {
+                        if(lexer.getToken()) return true;
+                        switch(lexer.token_current.type) {
+                                case "PRGM":
+                                if(lexer.token_next.type == "IDEN") {
+                                        // Update the tokens.
+                                        if(lexer.getToken()) return true;
+                                        if(this.buildProgramHead()) return true;    // P&D for now      // TODO: call error recovery here
+                                        break;
+                                }
+                                else {
+                                        lexer.markError("Expected program identifier.");
+                                        return true;    // P&D for now
+                                }
+
+                                case "STRT":
+                                if(this.state == "global_declaration") {
+                                        this.switchState("global_statement");
+                                }
+                                else {
+                                        lexer.markError("Unexpected BEGIN keyword within global scope.");
+                                        return true;    // P&D for now
+                                }
+                                break;
+
+                                case "END":
+                                if(this.state == "global_statement") {
+                                        if(lexer.token_next.type == "PRGM") {
+                                                this.switchState("program_end");
+                                                if(lexer.getToken()) return true;
+                                                if(this.buildProgramEnd()) return true;    // P&D for now      // TODO: call error recovery here
+                                        }
+                                        else {
+                                                lexer.markError("Expected keyword PROGRAM.");
+                                                return true;    // P&D for now
+                                        }        
+
+                                }
+                                else {
+                                        lexer.markError("Unexpected END keyword within global scope.");
+                                        return true;    // P&D for now
+                                }
+                                break;
+
+                                case "ENDP":
+                                console.log(lexer.token_next.type);
+                                if(this.state == null) {
+                                        if(lexer.token_next.type == "EOF") {
+                                                return false;
+                                        }
+                                }
+                                else {
+                                        lexer.markError("Unexpected period within global scope.");
+                                        return true;    // P&D for now
+                                }
+                                break;
+
+                                case "EOF":
+                                lexer.markError("Expected period within global scope.");
+                                return true;    // P&D for now
+
+                                default:
+                                lexer.markError("Unexpected input.");
+                                console.log(lexer.token_current);
+                                return true;
+                        }
+                }
+        }
+
+        // Wrpa the program up
+        buildProgramEnd() {
+                if(lexer.token_current.type == "PRGM") {
+                        messanger.programs[messanger.program.name] = messanger.program;
+                        console.log(messanger.programs);
+                        messanger.clearProgram();
+                        this.switchState(null);
+                        return false;
+                }
+                else {
+                        lexer.markError("Expected PROGRAM keyword.");
+                        return true;
+                }
+        }
+
+        // Build the program header
+        buildProgramHead() {
+                if(lexer.token_current.type == "IDEN") {
+                        if(lexer.token_next.type == "IS") {
+                                this.symbol_table[lexer.token_current.value] = {        // Grab that shit
+                                        "type"          : "STRING",
+                                        "value"         : lexer.token_current.value,
+                                        "global"        : true
+                                }
+                                messanger.program.name = lexer.token_current.value;     // Store the program name
+                                if(lexer.getToken()) return true;                       // Grab that shit
+                                this.switchState("global_declaration");                 // Switch the state
+                                console.log("Addition to the symbol table:");           // DEBUG
+                                console.log(this.symbol_table["YOUR_PROGRAM_NAME"]);    // DEBUG
+                                return false;
+                        }
+                        else {
+                                lexer.markError("Expected keyword IS.");
+                                return true;
+                        }
+                }
+                else {
+                        lexer.markError("Expected program identifier.");
+                        return true;
+                }
+        }
+
+        switchState(state) {
+                /* Possible states:
+                global_declaration
+                global_statement
+                program_end
+                */
+                this.state = state                                      // Switch the state
+                console.log("STATE SWITCH: " + this.state);             // DEBUG
+        }
+}
+var parser = new Parser();
 
 class Message {
         constructor() {
@@ -540,8 +663,31 @@ class Message {
                 }
         }
 
+        clearProgram() {
+                // list of errors
+                this.error_list = [];
+                this.message    = null;
+                this.line       = null;
+                this.flag       = false;
+
+                // The entire program
+                this.program    = {
+                        "name"          : "El Stupido",
+                        "declarations"  : null,
+                        "statements"    : null
+                }
+
+                // Something to contain everything.
+                this.data = {
+                        "error"         : null,
+                        "list"          : null,
+                        "program"       : null
+                }  
+        }
+
         clear() {
                 // list of errors
+                this.programs   = [];
                 this.error_list = [];
                 this.message    = null;
                 this.line       = null;
@@ -566,7 +712,7 @@ class Message {
         updateData() {
                 this.data.error = this.flag;
                 this.data.list  = this.error_list;
-                this.prgram     = this.program;
+                this.data.program = this.program;
         }
 
         // Modifies this.error_list with an error object
@@ -599,60 +745,15 @@ onmessage = function(message) {
 }
 
 function main(data) {
-        // Lexer management
-        lexer.update(data);
+        // Scanner management
+        scanner.update(data);
+        if(parser.buildPorgram()) console.log("Parser failed.");
 
-        // Return to the caller
         messanger.updateData();
         postMessage(messanger.data);
         return;
 }
 
-class Declaration {
-        
-        constructor() {
-                this.type               = null;
-                this.name               = null; 
-                this.declaration_list   = [];
-        }
-
-        // **Public
-
-        // Update all values associated with the type sent
-        updateDeclaration(type, name) {
-                // PROCEDURE | VARIABLE | TYPE
-                this.putName(name);
-                
-
-                return;
-        }
-
-        // Send the built declaration 
-        sendDeclaration(type) {
-                // PROCEDURE | VARIABLE | TYPE
-                
-                // Make sure the declaration is cool with the standards
-                if(this.checkDeclaration(type)) return true;
-
-
-                return;
-        }
-
-        // **Provate
-
-        // Checout the built declaration based on type
-        checkDeclaration(type) {
-                // PROCEDURE | VARIABLE | TYPE
-                
-                return;
-        }
-
-        // Place the name of the declaration
-        putName(name) {
-               
-                return;
-        }
-}
 
 
 
