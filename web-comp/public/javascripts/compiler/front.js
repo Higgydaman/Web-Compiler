@@ -548,6 +548,9 @@ class Parser {
                                         if(lexer.current.value == "VARIABLE") {
                                                 if(this.storeVariable()) return true; // P&D for now
                                         }
+                                        else if(lexer.current.value == "TYPE") {
+                                                if(this.setType()) return true;
+                                        }
                                         else {
                                                 lexer.markError("Unexpected declaration type.");
                                                 return true; // P&D for now
@@ -555,6 +558,8 @@ class Parser {
 
                                         if(!this.current_scope_isGlobal) {
                                                 this.master_symbol_table[this.scope] = this.symbol_table;
+                                                this.master_symbol_table["GLOBAL"] = this.global_symbol_table;
+                                                
                                         }
                                 }
                                 else {
@@ -632,6 +637,73 @@ class Parser {
                         }
                 }
 
+        }
+
+        // Set type
+        setType() {
+                if(lexer.current.value != "TYPE") {
+                        lexer.markError("Expected keyword TYPE.");
+                        return true;  
+                }
+
+                if(lexer.next.type == "IDEN") {
+                        if(lexer.getToken()) return true;
+                        // If it is global 
+                        if(this.current_scope_isGlobal) {
+                                
+                                // Check if it does not exist
+                                if(this.master_symbol_table["GLOBAL"][lexer.current.value] == null) {
+                                        lexer.markError("Variable does not exist within global scope.");
+                                        return true;
+                                }
+
+                                // Check if it is the program name
+                                if(this.master_symbol_table["GLOBAL"][lexer.current.value].value == messanger.program.name) {
+                                        lexer.markError("Cannot reassign the program type.");
+                                        return true;
+                                }
+
+                        }
+                        // If it is some other scope
+                        else {
+                                console.log(this.master_symbol_table);
+                                console.log(this.scope);
+                                console.log(lexer.current.value);
+                                if(this.master_symbol_table[this.scope][lexer.current.value] == null) {
+                                        lexer.markError("Variable does not exist within this scope scope.");
+                                        return true;
+                                }
+                        }
+
+                        // Update the type
+                        this.current_identifier = lexer.current.value;
+                        if(lexer.next.value == ":") {
+                                if(lexer.getToken()) return true;
+                                // Assign the temporary symbol table
+                                if(this.current_scope_isGlobal) this.temp_symbol_table = this.master_symbol_table["GLOBAL"];
+                                else this.temp_symbol_table = this.master_symbol_table[this.scope];
+                                if(this.storeTypemark()) return true;
+                                if(lexer.next.value == ";") {
+                                        if(lexer.getToken()) return true;
+                                        // Assign temp
+                                        if(this.current_scope_isGlobal) this.master_symbol_table["GLOBAL"] = this.temp_symbol_table;
+                                        else this.master_symbol_table[this.scope] = this.temp_symbol_table;
+                                        return false;
+                                }
+                                else {
+                                        lexer.markError("Expected end of line.");
+                                        return true;
+                                }
+                        }
+                        else {
+                                lexer.markError("Expected keyword : .");
+                                return true;   
+                        }
+                }
+                else {
+                        lexer.markError("Expected keyword TYPE.");
+                        return true;
+                }
         }
 
         // Store a variable
