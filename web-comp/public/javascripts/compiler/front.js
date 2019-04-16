@@ -10,14 +10,13 @@ class Scanner {
 
         update(data) {
                 // See if it was a bulk update
-                //console.log("Here");
+
                 this.body_declaration = false;
                 this.details = data.details;
                 this.code = data.value;
                 messanger.clear();
                 this.scanCode();
                 messanger.token_list = this.lexeme_list;
-                //console.log(this.lexeme_list);
         }
 
         markError(message) {
@@ -47,10 +46,9 @@ class Scanner {
                         EOF = this.getLexeme();
                         EOF = this.incrimentIndex("SCANNER");
                         if(this.lexeme != null) {
-                                // console.log(this.lexeme);
                                 this.lexeme_list.push(this.lexeme);
                         }
-                        else if(!EOF) console.log("SCANNER ERROR CODE 0.");
+                        else if(!EOF) {} // TODO
                 }
         }
 
@@ -79,7 +77,7 @@ class Scanner {
                         return false;
 
                         default:
-                        console.log("Scanner ERROR CODE 1.");
+                        // TODO
                         return true;
                 }
         }
@@ -160,22 +158,25 @@ class Scanner {
 				switch( this.current ) {	                                // Switch on the input character
 				case '*' :					                // Maybe all the ghosts are gone?
                                         if( this.next == '/' ) {	                        // Sweet, ghost insight
-                                                if(this.incrimentIndex("SCANNER")) return true;          // Incriment the index by one
 						comment_count--;				// Eat that ghost
 						if( comment_count == 0 ) {		        // Any ghosts left?
 							completed = true;			// Fuck no!
                                                 }
+                                                if(this.incrimentIndex("SCANNER")) return true;
+                                                if(this.incrimentIndex("SCANNER")) return true;          // Incriment the index by one
                                                 break;
 					}
-					if(this.incrimentIndex("SCANNER")) return true;					
+                                        if(this.incrimentIndex("SCANNER")) return true;
+                                        console.log("2: " + this.current);					
 				break;
-				case '/' :						        // Maybe another ghost
+                                case '/' :						        // Maybe another ghost
                                         if(this.next == '*') {			                // look ahead
                                                 comment_count++;
                                                 if(this.incrimentIndex("SCANNER")) return true;
+                                                if(this.incrimentIndex("SCANNER")) return true;          // Incriment the index by one
                                                 break;
                                         }					
-					if(this.incrimentIndex("SCANNER")) return true;
+                                        if(this.incrimentIndex("SCANNER")) return true;
                                 break;
                                 case "\n":
                                         this.line_number++;
@@ -187,7 +188,6 @@ class Scanner {
                         }
                         break;
                         default:
-                        console.log("Scanner: Error within comment skip section");
                 }
         }
 
@@ -500,8 +500,6 @@ class Lexer {
                 else {
                         this.index++;
                         this.current = scanner.lexeme_list[this.index];
-                        //console.log(this.index);
-                        //console.log(this.current);
                         if(this.index >= scanner.lexeme_list.length - 1) {
                                 this.token_next = {
                                         "type" : "EOF"
@@ -510,7 +508,6 @@ class Lexer {
                         else {
                                 this.next = scanner.lexeme_list[this.index + 1]
                         }
-                        //console.log(this.next);
                         return false;
                 }
         }
@@ -615,7 +612,6 @@ class Parser {
 
                                 case "ENDP":
                                 if(this.state == "end_of_program") {
-                                        //console.log(lexer.next);
                                         if(lexer.next.type == "EOF") {
                                                 return false;
                                         }
@@ -632,7 +628,6 @@ class Parser {
 
                                 default:
                                 lexer.markError("Unexpected input.");
-                                //console.log(lexer.current);
                                 return true;
                         }
                 }
@@ -657,29 +652,38 @@ class Parser {
                                 "global"        : this.current_scope_isGlobal,
                                 "bound"         : null
                         }
-                        //console.log(this.symbol_table[lexer.current.value]);
                         if(lexer.next.value == ":") {
                                 if(lexer.getToken()) return true;
                                 if(this.storeTypemark()) return true;
                                 // Put bound stuff here
 
-                                // Assign temp
-                                if(this.current_scope_isGlobal) this.global_symbol_table = this.temp_symbol_table;
-                                else this.symbol_table = this.temp_symbol_table;
-                                console.log(this.global_symbol_table[this.current_identifier]);
-
                                 // Check for end line
                                 if(lexer.next.value == ";") {
                                         if(lexer.getToken()) return true;
+                                        // Assign temp
+                                        if(this.current_scope_isGlobal) this.global_symbol_table = this.temp_symbol_table;
+                                        else this.symbol_table = this.temp_symbol_table;
                                         return false;
                                 }
+                                else if(lexer.next.value == "[") {
+                                        if(this.storeBound()) return true;
+                                        if(lexer.next.value == ";") {
+                                                if(lexer.getToken()) return true;
+                                                // Assign temp
+                                                if(this.current_scope_isGlobal) this.global_symbol_table = this.temp_symbol_table;
+                                                else this.symbol_table = this.temp_symbol_table;
+                                                return false;
+                                        }
+                                        else {
+                                                lexer.markError("Expected end of line.");
+                                                return true;
+                                        }
+                                }
                                 else {
-                                        //console.log(lexer.next);
                                         lexer.markError("Expected end of line.");
                                         return true;
                                 }
 
-                                return false;
                         }
                         else {
                                 lexer.markError("Expected declaration continue key : .");
@@ -690,6 +694,62 @@ class Parser {
                         lexer.markError("Expected variable identifier.");
                         return true;
                 }
+        }
+
+        // Store the optional bound
+        storeBound() {
+                if(lexer.next.value != "[") {
+                        lexer.markError("Expected type mark.");
+                        return true;
+                }
+
+                // Incriment the token
+                if(lexer.getToken()) return true;
+
+                // Temporary bound
+                var temp_bound = 1;
+
+                switch(lexer.next.type) {
+                        case "AROP":
+                        if(lexer.next.value == "-") {
+                                if(lexer.getToken()) return true;
+                                temp_bound = -1*temp_bound;
+                                if(lexer.next.type != "NUMB") {
+                                        lexer.markError("Expected bound number.");
+                                        return true; 
+                                }
+                                if(lexer.getToken()) return true;
+                                if(lexer.next.value == "]") {
+                                        temp_bound = temp_bound*lexer.token_current.value;
+                                        this.temp_symbol_table[this.current_identifier].bound = temp_bound;
+                                        if(lexer.getToken()) return true;
+                                        return false;
+                                }
+                                else {
+                                        lexer.markError("Unbalanced brackets in variable bound.");
+                                        return true;
+                                }
+                        }
+                        else {
+                                lexer.markError("Expected bound number.");
+                                return true; 
+                        }
+                        case "NUMB":
+                        if(lexer.getToken()) return true;
+                        if(lexer.next.value == "]") {
+                                temp_bound = temp_bound*lexer.token_current.value;
+                                this.temp_symbol_table[this.current_identifier].bound = temp_bound;
+                                if(lexer.getToken()) return true;
+                                return false;
+                        }
+                        else {
+                                lexer.markError("Unbalanced brackets in variable bound.");
+                                return true;
+                        }
+                        default:
+                        lexer.markError("Expected bound number.");
+                        return true;
+                }                
         }
 
         // Store a type mark
@@ -765,8 +825,6 @@ class Parser {
                                 messanger.program.name = lexer.current.value;           // Store the program name
                                 if(lexer.getToken()) return true;                       // Grab that shit
                                 this.switchState("global_declaration");                 // Switch the state
-                                //console.log("Addition to the global symbol table:");           // DEBUG
-                                //console.log(this.global_symbol_table["YOUR_PROGRAM_NAME"]);    // DEBUG
                                 return false;
                         }
                         else {
