@@ -86,10 +86,20 @@ function printResult() {
         print_result = print_result + "<PROGRAM NAME," + front_message.program.name + ">\n";
         if(front_message.program.variables != null) {
             print_result = print_result + "<GLOBAL VARIABLES, \n";
-            for(var variable in front_message.program.variables) {
-                print_result = print_result + "(" + variable + "," + front_message.program.variables[variable].type + "," + front_message.program.variables[variable].value + ")\n";
+            for(var variable in front_message.program.variables["GLOBAL"]) {
+                print_result = print_result + "(" + variable + "," + front_message.program.variables["GLOBAL"][variable].type + "," + front_message.program.variables["GLOBAL"][variable].value + ")\n";
             }
             print_result = print_result + ">\n";
+            for(var scope in front_message.program.variables) {
+                if(scope != "GLOBAL") {
+                    print_result = print_result + "<" + scope + " VARIABLES, \n";
+                    for(var variable in front_message.program.variables[scope]) {
+                        print_result = print_result + "(" + variable + "," + front_message.program.variables[scope][variable].type + "," + front_message.program.variables[scope][variable].value + ")\n";
+                    }
+                    print_result = print_result + ">\n";
+                }
+            }
+            
         }
         break;
         case "CODE":
@@ -98,8 +108,13 @@ function printResult() {
         default:
         print_result = " Select an output. \n";
     }
-    if(front_message.error != true) print_result = print_result + "<PROGRAM END>\n";
-    else print_result = print_result + "***PROGRAM PARSE FAILURE\n";
+    if(front_message.error != true && state == "PARSER") print_result = print_result + "<PROGRAM END>\n";
+    else if(state != "PARSER") {
+        
+    }
+    else {
+        print_result = print_result + "***PROGRAM PARSE FAILURE***\n";
+    }
     result.setValue(print_result);
     result.clearSelection();
 }

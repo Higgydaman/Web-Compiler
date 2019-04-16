@@ -500,8 +500,8 @@ class Lexer {
                 else {
                         this.index++;
                         this.current = scanner.lexeme_list[this.index];
-                        console.log(this.index);
-                        console.log(this.current);
+                        //console.log(this.index);
+                        //console.log(this.current);
                         if(this.index >= scanner.lexeme_list.length - 1) {
                                 this.token_next = {
                                         "type" : "EOF"
@@ -510,7 +510,7 @@ class Lexer {
                         else {
                                 this.next = scanner.lexeme_list[this.index + 1]
                         }
-                        console.log(this.next);
+                        //console.log(this.next);
                         return false;
                 }
         }
@@ -520,11 +520,14 @@ var lexer = new Lexer();
 class Parser {
 
         // Build Program
-        buildPorgram() {
+        buildProgram() {
                 lexer.index             = -1;
                 lexer.current           = null;
                 lexer.next              = null;
+                this.master_symbol_table= new Object();
                 this.global_symbol_table= new Object();
+                this.symbol_table       = new Object();
+                this.scope              = null;
                 this.switchState("program_start");
                 
                 
@@ -534,6 +537,35 @@ class Parser {
                                 lexer.markError("Unexpected input after progrqam end.");
                         }
                         switch(lexer.current.type) {
+                                case "DECN":
+                                // Set the global variable false for now
+                                this.current_scope_isGlobal = false;
+                                this.scope = messanger.program.name;
+                                if(this.state == "global_declaration") {
+                                        // Check if global scope 
+                                        if(lexer.current.value == "GLOBAL") {
+                                                this.current_scope_isGlobal = true;
+                                                if(lexer.getToken()) return true; // P&D for now
+                                        }
+
+                                        if(lexer.current.value == "VARIABLE") {
+                                                if(this.storeVariable()) return true; // P&D for now
+                                        }
+                                        else {
+                                                lexer.markError("Unexpected declaration type.");
+                                                return true; // P&D for now
+                                        }
+
+                                        if(!this.current_scope_isGlobal) {
+                                                this.master_symbol_table[this.scope] = this.symbol_table;
+                                        }
+                                }
+                                else {
+                                        lexer.markError("Unexpected declaration after BEGIN keyword.");
+                                        return true;    // P&D for now
+                                }
+                                break;
+                                
                                 case "PRGM":
                                 if(lexer.next.type == "IDEN") {
                                         // Update the tokens.
@@ -564,7 +596,8 @@ class Parser {
                                                 if(this.buildProgramEnd()) return true;    // P&D for now      // TODO: call error recovery here
                                                 else {
                                                         // Update the messenger
-                                                        messanger.program.variables = this.global_symbol_table;
+                                                        this.master_symbol_table["GLOBAL"] = this.global_symbol_table;
+                                                        messanger.program.variables = this.master_symbol_table;
                                                         return false;
                                                 }
                                         }
@@ -582,7 +615,7 @@ class Parser {
 
                                 case "ENDP":
                                 if(this.state == "end_of_program") {
-                                        console.log(lexer.next);
+                                        //console.log(lexer.next);
                                         if(lexer.next.type == "EOF") {
                                                 return false;
                                         }
@@ -599,21 +632,123 @@ class Parser {
 
                                 default:
                                 lexer.markError("Unexpected input.");
-                                console.log(lexer.current);
+                                //console.log(lexer.current);
                                 return true;
                         }
                 }
 
         }
 
-        // Wrpa the program up
+        // Store a variable
+        storeVariable() {
+                if(lexer.current.value != "VARIABLE") {
+                        lexer.markError("Expected varable.");
+                        return true;
+                }
+                if(lexer.next.type == "IDEN") {
+                        if(lexer.getToken()) return true;
+                        if(this.current_scope_isGlobal) this.temp_symbol_table = this.global_symbol_table; 
+                        else this.temp_symbol_table = this.symbol_table;
+                        this.current_identifier = lexer.current.value;
+                        this.temp_symbol_table[lexer.current.value] = {                 // Grab that shit
+                                "type"          : null,
+                                "list"          : [],
+                                "value"         : null,
+                                "global"        : this.current_scope_isGlobal,
+                                "bound"         : null
+                        }
+                        //console.log(this.symbol_table[lexer.current.value]);
+                        if(lexer.next.value == ":") {
+                                if(lexer.getToken()) return true;
+                                if(this.storeTypemark()) return true;
+                                // Put bound stuff here
+
+                                // Assign temp
+                                if(this.current_scope_isGlobal) this.global_symbol_table = this.temp_symbol_table;
+                                else this.symbol_table = this.temp_symbol_table;
+                                console.log(this.global_symbol_table[this.current_identifier]);
+
+                                // Check for end line
+                                if(lexer.next.value == ";") {
+                                        if(lexer.getToken()) return true;
+                                        return false;
+                                }
+                                else {
+                                        //console.log(lexer.next);
+                                        lexer.markError("Expected end of line.");
+                                        return true;
+                                }
+
+                                return false;
+                        }
+                        else {
+                                lexer.markError("Expected declaration continue key : .");
+                                return true;    
+                        }
+                }
+                else {
+                        lexer.markError("Expected variable identifier.");
+                        return true;
+                }
+        }
+
+        // Store a type mark
+        storeTypemark() {
+                switch(lexer.next.type) {
+                        case  "MARK":
+                        if(lexer.getToken()) return true;
+                        this.temp_symbol_table[this.current_identifier].type = lexer.current.value;
+                        if(lexer.current.value == "ENUM") {
+                                if(lexer.getToken()) return true;
+                                if(this.storeEnum()) return true;
+                        }
+                        break;
+                        case "IDEN": // I feel like something special should happen here.
+                        if(lexer.getToken()) return true;
+                        this.temp_symbol_table[this.current_identifier].type = lexer.current.value;
+                        break;
+                        default:
+                        lexer.markError("Expected type mark.");
+                        return true;
+                }
+                return false;
+        }
+
+        storeEnum() {
+                var list = [];
+                if(lexer.current.value != "{") {
+                        lexer.markError("Expected opening { for enum list.");
+                        return true;
+                }
+                else if(lexer.getToken()) return true;
+
+                while(lexer.current.value != "}") {
+                        if(lexer.current.type == "IDEN") {
+                                list.push(lexer.current.value);
+                                if(lexer.next.value == ",") {
+                                        if(lexer.getToken()) return true;
+                                }
+                        }
+                        else {
+                                lexer.markError("Unexpected arguement within enum list.");
+                                return true;   
+                        }
+                        if(lexer.getToken()) return true;
+                }
+
+                this.temp_symbol_table[this.current_identifier].list = list;
+                return false;
+
+        }
+
+        // Wrap the program up
         buildProgramEnd() {
                 if(lexer.current.type == "PRGM" && lexer.next.value == ".") {
                         if(lexer.getToken()) return true;
                         return false;
                 }
                 else {
-                        lexer.markError("Expected PROGRAM keyword.");
+                        lexer.markError("Expected period to end program.");
                         return true;
                 }
         }
@@ -630,8 +765,8 @@ class Parser {
                                 messanger.program.name = lexer.current.value;           // Store the program name
                                 if(lexer.getToken()) return true;                       // Grab that shit
                                 this.switchState("global_declaration");                 // Switch the state
-                                console.log("Addition to the symbol table:");           // DEBUG
-                                console.log(this.global_symbol_table["YOUR_PROGRAM_NAME"]);    // DEBUG
+                                //console.log("Addition to the global symbol table:");           // DEBUG
+                                //console.log(this.global_symbol_table["YOUR_PROGRAM_NAME"]);    // DEBUG
                                 return false;
                         }
                         else {
@@ -772,7 +907,7 @@ onmessage = function(message) {
 function main(data) {
         // Scanner management
         scanner.update(data);
-        parser.buildPorgram();
+        parser.buildProgram();
 
         messanger.updateData();
         postMessage(messanger.data);
