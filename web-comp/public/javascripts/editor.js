@@ -25,12 +25,33 @@
 // Some globals that are needed, we assume we have at least 4 threads for now
 const front_end = new Worker("/javascripts/compiler/front.js");
 
+document.getElementById("Scanner").addEventListener("click", switch_toScanner);
+document.getElementById("Parser").addEventListener("click", switch_toParser);
+document.getElementById("Code").addEventListener("click", switch_toCode);
+
 function ready() {
     setupEditor();
 }
 
+var state = null;
+function switch_toScanner() {
+    state = "SCANNER";
+    if(front_message != null) printResult();
+}
+function switch_toParser() {
+    state = "PARSER";
+    if(front_message != null) printResult();
+}
+function switch_toCode() {
+    state = "CODE";
+    if(front_message != null) printResult();
+}
+
+var front_message = null;
 front_end.onmessage = function(e) {
     // See where the error is
+
+    front_message = e.data;
 
     editor.getSession().clearAnnotations();
     console.log(e.data);
@@ -38,7 +59,6 @@ front_end.onmessage = function(e) {
         var length = e.data.list.length - 1;
         var i = 0;
         while(i <= length) {
-            console.log(i);
             editor.getSession().setAnnotations([{
                 row: e.data.list[i].line,
                 column: 1,
@@ -48,6 +68,40 @@ front_end.onmessage = function(e) {
             i = i + 1;
         }
     }
+
+    printResult();
+}
+
+function printResult() {
+    var print_result = null;
+    switch(state) {
+        case "SCANNER":
+        print_result = " << SCANNER OUTPUT >> \n";
+        front_message.tokens.forEach(function(element) {
+            print_result = print_result + "<" + element.type + "," + element.value + "," + (element.line + 1) + "> \n";
+        });
+        break;
+        case "PARSER":
+        print_result = " << PARSER OUTPUT >> \n";
+        print_result = print_result + "<PROGRAM NAME," + front_message.program.name + ">\n";
+        if(front_message.program.variables != null) {
+            print_result = print_result + "<GLOBAL VARIABLES, \n";
+            for(var variable in front_message.program.variables) {
+                print_result = print_result + "(" + variable + "," + front_message.program.variables[variable].type + "," + front_message.program.variables[variable].value + ")\n";
+            }
+            print_result = print_result + ">\n";
+        }
+        break;
+        case "CODE":
+        print_result = " << CODE OUTPUT >> \n";
+        break;
+        default:
+        print_result = " Select an output. \n";
+    }
+    if(front_message.error != true) print_result = print_result + "<PROGRAM END>\n";
+    else print_result = print_result + "***PROGRAM PARSE FAILURE\n";
+    result.setValue(print_result);
+    result.clearSelection();
 }
 
 function setupEditor() {

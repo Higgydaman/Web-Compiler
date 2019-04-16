@@ -16,7 +16,8 @@ class Scanner {
                 this.code = data.value;
                 messanger.clear();
                 this.scanCode();
-                console.log(this.lexeme_list);
+                messanger.token_list = this.lexeme_list;
+                //console.log(this.lexeme_list);
         }
 
         markError(message) {
@@ -87,9 +88,15 @@ class Scanner {
         getString() {
                 this.key = null;
                 var result =  this.current;
+
+                if(this.next == null) {
+                        this.key = result;
+                        return;   
+                }
+
                 while(this.next.match(/^[a-zA-Z0-9_]+$/)) {
                         result = result + this.next;
-                        if((this.incrimentIndex("SCANNER")) | (this.next == null)) {
+                        if(this.incrimentIndex("SCANNER") || this.next == null) {
                                 this.key = result;
                                 return;
                         }   
@@ -452,26 +459,25 @@ class Lexer {
 
                 // End of file check
                 if(this.incrimentIndex()) {
-                        this.token_current = {
+                        this.current = {
                                 "type" : "EOF"
                         }
 
-                        this.token_next = {
+                        this.next = {
                                 "type" : "EOF"
                         }
 
                         return false;
                 }
 
-                // Pass the current LEXEME
                 this.token_current = {
                         "type" : this.current.type,
                         "value": this.current.value
                 }
 
                 // Pass the current LEXEME
-                if(this.token_next.type != "EOF") {
-                        this.token_next = {
+                if(this.next.type != "EOF") {
+                        this.next = {
                                 "type" : this.next.type,
                                 "value": this.next.value
                         } 
@@ -494,6 +500,8 @@ class Lexer {
                 else {
                         this.index++;
                         this.current = scanner.lexeme_list[this.index];
+                        console.log(this.index);
+                        console.log(this.current);
                         if(this.index >= scanner.lexeme_list.length - 1) {
                                 this.token_next = {
                                         "type" : "EOF"
@@ -502,6 +510,7 @@ class Lexer {
                         else {
                                 this.next = scanner.lexeme_list[this.index + 1]
                         }
+                        console.log(this.next);
                         return false;
                 }
         }
@@ -512,16 +521,21 @@ class Parser {
 
         // Build Program
         buildPorgram() {
-                lexer.index         = -1;
-                lexer.token_current = null;
-                lexer.token_next    = null;
-                this.symbol_table   = [];
-                this.state          = null;
+                lexer.index             = -1;
+                lexer.current           = null;
+                lexer.next              = null;
+                this.global_symbol_table= new Object();
+                this.switchState("program_start");
+                
+                
                 while(1) {
                         if(lexer.getToken()) return true;
-                        switch(lexer.token_current.type) {
+                        if(this.state == "program_end") {
+                                lexer.markError("Unexpected input after progrqam end.");
+                        }
+                        switch(lexer.current.type) {
                                 case "PRGM":
-                                if(lexer.token_next.type == "IDEN") {
+                                if(lexer.next.type == "IDEN") {
                                         // Update the tokens.
                                         if(lexer.getToken()) return true;
                                         if(this.buildProgramHead()) return true;    // P&D for now      // TODO: call error recovery here
@@ -544,10 +558,15 @@ class Parser {
 
                                 case "END":
                                 if(this.state == "global_statement") {
-                                        if(lexer.token_next.type == "PRGM") {
+                                        if(lexer.next.type == "PRGM") {
                                                 this.switchState("program_end");
                                                 if(lexer.getToken()) return true;
                                                 if(this.buildProgramEnd()) return true;    // P&D for now      // TODO: call error recovery here
+                                                else {
+                                                        // Update the messenger
+                                                        messanger.program.variables = this.global_symbol_table;
+                                                        return false;
+                                                }
                                         }
                                         else {
                                                 lexer.markError("Expected keyword PROGRAM.");
@@ -562,9 +581,9 @@ class Parser {
                                 break;
 
                                 case "ENDP":
-                                console.log(lexer.token_next.type);
-                                if(this.state == null) {
-                                        if(lexer.token_next.type == "EOF") {
+                                if(this.state == "end_of_program") {
+                                        console.log(lexer.next);
+                                        if(lexer.next.type == "EOF") {
                                                 return false;
                                         }
                                 }
@@ -580,19 +599,17 @@ class Parser {
 
                                 default:
                                 lexer.markError("Unexpected input.");
-                                console.log(lexer.token_current);
+                                console.log(lexer.current);
                                 return true;
                         }
                 }
+
         }
 
         // Wrpa the program up
         buildProgramEnd() {
-                if(lexer.token_current.type == "PRGM") {
-                        messanger.programs[messanger.program.name] = messanger.program;
-                        console.log(messanger.programs);
-                        messanger.clearProgram();
-                        this.switchState(null);
+                if(lexer.current.type == "PRGM" && lexer.next.value == ".") {
+                        if(lexer.getToken()) return true;
                         return false;
                 }
                 else {
@@ -603,18 +620,18 @@ class Parser {
 
         // Build the program header
         buildProgramHead() {
-                if(lexer.token_current.type == "IDEN") {
-                        if(lexer.token_next.type == "IS") {
-                                this.symbol_table[lexer.token_current.value] = {        // Grab that shit
+                if(lexer.current.type == "IDEN") {
+                        if(lexer.next.type == "IS") {
+                                this.global_symbol_table[lexer.current.value] = {        // Grab that shit
                                         "type"          : "STRING",
-                                        "value"         : lexer.token_current.value,
+                                        "value"         : lexer.current.value,
                                         "global"        : true
                                 }
-                                messanger.program.name = lexer.token_current.value;     // Store the program name
+                                messanger.program.name = lexer.current.value;           // Store the program name
                                 if(lexer.getToken()) return true;                       // Grab that shit
                                 this.switchState("global_declaration");                 // Switch the state
                                 console.log("Addition to the symbol table:");           // DEBUG
-                                console.log(this.symbol_table["YOUR_PROGRAM_NAME"]);    // DEBUG
+                                console.log(this.global_symbol_table["YOUR_PROGRAM_NAME"]);    // DEBUG
                                 return false;
                         }
                         else {
@@ -647,10 +664,12 @@ class Message {
                 this.message    = null;
                 this.line       = null;
                 this.flag       = false;
+                this.token_list = null;
 
                 // The entire program
                 this.program    = {
                         "name"          : "El Stupido",
+                        "variables"     : null,
                         "declarations"  : null,
                         "statements"    : null
                 }
@@ -659,7 +678,8 @@ class Message {
                 this.data = {
                         "error"         : null,
                         "list"          : null,
-                        "program"       : null
+                        "program"       : null,
+                        "tokens"        : null
                 }
         }
 
@@ -673,6 +693,7 @@ class Message {
                 // The entire program
                 this.program    = {
                         "name"          : "El Stupido",
+                        "variables"     : null,
                         "declarations"  : null,
                         "statements"    : null
                 }
@@ -681,7 +702,8 @@ class Message {
                 this.data = {
                         "error"         : null,
                         "list"          : null,
-                        "program"       : null
+                        "program"       : null,
+                        "tokens"        : null
                 }  
         }
 
@@ -696,6 +718,7 @@ class Message {
                 // The entire program
                 this.program    = {
                         "name"          : "El Stupido",
+                        "variables"     : null,
                         "declarations"  : null,
                         "statements"    : null
                 }
@@ -704,7 +727,8 @@ class Message {
                 this.data = {
                         "error"         : null,
                         "list"          : null,
-                        "program"       : null
+                        "program"       : null,
+                        "tokens"        : null
                 }  
         }
 
@@ -713,6 +737,7 @@ class Message {
                 this.data.error = this.flag;
                 this.data.list  = this.error_list;
                 this.data.program = this.program;
+                this.data.tokens = this.token_list;
         }
 
         // Modifies this.error_list with an error object
@@ -747,7 +772,7 @@ onmessage = function(message) {
 function main(data) {
         // Scanner management
         scanner.update(data);
-        if(parser.buildPorgram()) console.log("Parser failed.");
+        parser.buildPorgram();
 
         messanger.updateData();
         postMessage(messanger.data);
