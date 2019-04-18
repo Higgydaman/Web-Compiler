@@ -16,3 +16,14 @@
 1) Math is not really correct......suggest loading the entire expression and then evaluating wiht PEMDAS
 2) Negative numbers is not really working
 3) Need to use try/catch methods for ALL table indexes
+
+// Internal errors
+"Internal error 0."
+
+// Some debugs I like
+// let index = 0;
+                //         console.log("LIST:");
+                //         while(temp_array[index] != "undefined" && typeof temp_array[index] != 'undefined' && temp_array[index] != null) {
+                //                 console.log(temp_array[index]);
+                //                 index++;
+                //         }

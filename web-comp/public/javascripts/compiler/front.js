@@ -947,17 +947,19 @@ class Parser {
                                 gathering = false;
                                 break;
                         }
-                }
+                } 
 
                 // Get the correct list
                 if(short) argument_list = list;
 
+
                 // Check the list out for length
                 if(argument_list.length == 1) {
                         result = argument_list[0];
-                        if(result != "undefined" && typeof result != 'undefined' && result != null) { 
+                        if(result != "undefined" && typeof result != 'undefined' && result != null) {
                                 if(result.type == "INTEGER" || result.type == "FLOAT" || result.type == "BOOL" || result.type == "STRG") {
                                         this.expression_result = result;
+
                                         return false;
                                 }
                                 else {
@@ -1054,6 +1056,7 @@ class Parser {
                                 // See if we have found a EXOP
                                 if(temp.value == "&" || temp.value == "|") {
                                         var exop = temp.value;
+                                        temp = null;
                                         // Gather the left side
                                         while(1) {
                                                 // Grab one
@@ -1066,7 +1069,6 @@ class Parser {
                                                         }
                                                         break;
                                                 }
-                                                console.log(temp);
                                                 x_array.push(temp);
                                         }
                                         // Sweet we gathered it, now lets evaluate it
@@ -1078,15 +1080,15 @@ class Parser {
                                         if(this.expression_result.value != 0) x = 1;    // True case
                                         else x = 0;                                     // False otherwise
 
-
                                         // gather the right side
+                                        temp = null;
                                         while(1) {
                                                 // Grab one
                                                 temp = argument_list.shift();
                                                 // Exit case
                                                 if(temp == "undefined" || typeof temp === 'undefined' || temp == null) {
                                                         if(y_array.length == 0) {
-                                                                lexer.markError("Expected arguments before expressional operator.");
+                                                                lexer.markError("Expected arguments after expressional operator.");
                                                                 return true;
                                                         }
                                                         break;
@@ -1096,7 +1098,7 @@ class Parser {
 
                                         // Sweet we gathered it, now lets evaluate it
                                         if(this.evaluateExpression(true,y_array)) return true;
-                                        if(this.expression_result == "undefined" || typeof this.expression_result === 'undefined' || this.expression_result == null) {
+                                        if(this.expression_result == 'undefined' || typeof this.expression_result === 'undefined' || this.expression_result == null) {
                                                 lexer.markError("Internal error Y.");
                                                 return true;
                                         }
@@ -1118,7 +1120,8 @@ class Parser {
                                                 "value": x
                                         }
 
-                                        temp_array.push(argument);
+                                        // Assign X
+                                        x = argument;
                                 }
                                 else {
                                         x = temp;
@@ -1127,7 +1130,9 @@ class Parser {
                                 if(x != "undefined" && typeof x != 'undefined' && x != null) {
                                         temp_array.push(x);
                                 }
-                        }                       
+                        }
+                        
+                                               
 
                         // Do factors now
                         argument_list = temp_array;
@@ -1250,13 +1255,10 @@ class Parser {
                         // Verify argument list is as expected
                         if(argument_list.length != 1 && !short) {
                                 lexer.markError("Internal error EXPRESSION.");
-                                console.log(argument_list);
                                 return true;
                         }
 
                         result = argument_list[0];
-                        // console.log("END RESULT:");
-                        // console.log(result);
                 }
                 else {
                         result = null;
