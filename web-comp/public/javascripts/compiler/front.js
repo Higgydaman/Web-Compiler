@@ -597,6 +597,7 @@ class Parser {
                                         while(lexer.current.value != ']') {
                                                 if(lexer.getToken()) return true;
                                         } 
+                                        lexer.markError("Compiler does not currently support arrays.");
                                 }
 
                                 // This is the main test for assignment statement
@@ -612,14 +613,14 @@ class Parser {
                                                 // Main call to generate the assignment
                                                 if(this.evaluateExpression(false,null)) return true;
 
-                                                // Store the expression
-                                                if(this.storeSymbol(this.current_identifier,this.expression_result,this.scope)) return true;
-
                                                 // Check for the end
                                                 if(lexer.current.value != ";") {    
                                                         lexer.markError("Expected end of line character ; .");
                                                         return true;    // P&D for now           
                                                 }
+
+                                                // Store the expression
+                                                if(this.storeSymbol(this.current_identifier,this.expression_result,this.scope)) return true;
                                         }
                                         else {
                                                 lexer.markError("Expected = .");
@@ -773,11 +774,15 @@ class Parser {
                 // See if the statement is true
                 if(lexer.next.value == "(") {
                         if(this.evaluateExpression(false,null)) return true;
-                        if(lexer.next.value != ")") {
+                        if(lexer.current.value != ")") {
                                 lexer.markError("Expected ending bracket in expression.");
                                 return true;
                         }
-                        if(lexer.getToken())  return true;
+                        if(this.expression_result != 0) {
+                                console.log("TRUE.");
+                        }
+                        else console.log("FALSE.");
+                        return true //DEBUG
                 }
                 else {
                         lexer.markError("Expected expression with IF.");
@@ -888,7 +893,7 @@ class Parser {
                                 }
                                 break;
                                 case "IDEN":
-                                if(this.getSymbol(lexer.current.value)) return true; // Get the symbol
+                                if(this.getSymbol(lexer.current.value, this.scope)) return true; // Get the symbol
                                 argument = {
                                         "type"  : this.symbol.type,
                                         "value" : this.symbol.value
@@ -1261,24 +1266,19 @@ class Parser {
         }
 
         // Get a symbol from the appropriate table
-        getSymbol(variable) {
+        getSymbol(variable, scope) {
+                
                 // Clear
                 this.symbol = null;
 
-                // Check the global table
-                try {
-                        this.symbol = this.master_symbol_table["GLOBAL"][variable];
-                }
-                catch(TypeError) {
+                // Check the ol tables
+                if(this.checkTables(variable,scope)) return true;
 
-                        // Check the local table
-                        try {
-                                this.symbol = this.master_symbol_table["SCOPE"][variable];;
-                        } 
-                        catch(TypeError) {
-                                lexer.markError("Varaiable undefined.");
-                                return true;
-                        }
+                // Assign 
+                if(this.isGlobal) this.symbol = this.master_symbol_table["GLOBAL"][variable];
+                else if(this.isLocal) this.symbol = this.master_symbol_table[scope][variable];
+                else {
+                        lexer.markError("Varibale " + variable + " does not exist within scope.")
                 }
 
                 // Return!
