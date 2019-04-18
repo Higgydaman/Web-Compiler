@@ -615,7 +615,7 @@ class Parser {
                                                 this.previous_type_assignment = null;   // For type checking
                                                 
                                                 // Main call to generate the assignment
-                                                if(this.evaluateExpression()) return true;
+                                                if(this.evaluateExpression(false,null)) return true;
 
                                                 console.log("ENDING PREMATURE");
                                                 return true;
@@ -781,7 +781,7 @@ class Parser {
         parseIf() {
                 // See if the statement is true
                 if(lexer.next.value == "(") {
-                        if(this.evaluateExpression()) return true;
+                        if(this.evaluateExpression(false,null)) return true;
                         if(lexer.next.value != ")") {
                                 lexer.markError("Expected ending bracket in expression.");
                                 return true;
@@ -827,19 +827,39 @@ class Parser {
         }
 
         // Evaluate Expression
-        evaluateExpression() {
+        evaluateExpression(short, list) {
                 // Before we make the call we need to do this shit
                 var argument_list = [];             // Something to store everything in
                 var argument = null;
                 var result = null;                  // Something to pass back
                 var gathering = true;
+                if(short) gathering = false;        // Gives the option to skip alot
                 // Lets make a decision on what we are about to collect
                 while(gathering) {
                         if(lexer.getToken()) return true;
                         argument = null;
                         switch(lexer.current.type) {
-                                case "(":
-                                // TODO
+                                case "BRKT":
+                                if(lexer.current.value == "(") {
+                                        argument = {
+                                                "type"  : "BRKT",
+                                                "value" : "("
+                                        }
+                                        argument_list.push(argument);
+                                        break;
+                                }
+                                else if(lexer.current.value == ")") {
+                                        argument = {
+                                                "type"  : "BRKT",
+                                                "value" : ")"
+                                        }
+                                        argument_list.push(argument);
+                                        break;
+                                }
+                                else {
+                                        lexer.markError("Unexpected bracket type " + lexer.current.value + ".");
+                                        gathering = false;
+                                }
                                 break;
                                 case "AROP":
                                 switch(lexer.current.value) {
@@ -916,7 +936,7 @@ class Parser {
                                 case "RLOP":
                                 case "EXOP":
                                 argument = {
-                                        "type"  : lexer.current.type,
+                                        "type"  : lexer.current. type,
                                         "value" : lexer.current.value
                                 }
                                 argument_list.push(argument);
@@ -929,12 +949,36 @@ class Parser {
                         }
                 }
 
-                // Evaluate the expression
+                // Get the correct list
+                if(short) argument_list = list;
 
-                if(argument_list != null) {
+                // Check the list out for length
+                if(argument_list.length == 1) {
+                        result = argument_list[0];
+                        if(result != "undefined" && typeof result != 'undefined' && result != null) { 
+                                if(result.type == "INTEGER" || result.type == "FLOAT" || result.type == "BOOL" || result.type == "STRG") {
+                                        this.expression_result = result;
+                                        return false;
+                                }
+                                else {
+                                        lexer.markError("Expression result is not wihtin type.");
+                                        return true;
+                                }
+                        }
+                        else {
+                                lexer.markError("Internal error 0.");
+                                return true;
+                        }
+
+                        
+                }
+
+                // Evaluate the expression
+                if(argument_list != "undefined" && typeof argument_list != 'undefined' && argument_list != null) {
 
                         // Do inner expressions first
                         var temp_array = [];
+                        var x_array = [];
                         var x = null;
                         var y = null;
                         var temp = null;
@@ -946,17 +990,144 @@ class Parser {
                                 if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
                                 
                                 // See if we have found a FACTOR
-                                if(temp.type == "RLOP" || temp.type == "RLOP") {
+                                if(temp.value == "(") {
                                         // Grab everything before the operation
-                                        
+                                        temp = argument_list.shift();
+                                        var bracket_count = 1;
+                                        while(1) {
+                                                x_array.push(temp);        
+                                                temp = argument_list.shift();
+                                                
+                                                // Exit if dead
+                                                if(temp == "undefined" || typeof temp === 'undefined' || temp == null) {
+                                                        lexer.markError("Unbalanced parenthesis.");
+                                                        return true;
+                                                }
+
+                                                // Check for a new open
+                                                if(temp.value == "(") {
+                                                        bracket_count = bracket_count + 1;
+                                                }
+                                                // Check close
+                                                if(temp.value == ")") {
+                                                        bracket_count = bracket_count - 1
+                                                }
+
+                                                // Break if done
+                                                if(bracket_count == 0) break;
+                                        }
+                                        // Call thyself
+                                        if(this.evaluateExpression(true,x_array)) return true;
+                                        // Assign the new value
+                                        x = this.expression_result;
+                                        this.expression_result = null;
                                 }
+                                else if(temp.value == ")") {
+                                        lexer.markError("Unbalanced parenthesis.");
+                                        return true;
+                                } 
                                 else {
                                         // Else push the temp
                                         x = temp;
                                 }
 
-                                temp_array.push(x);
+                                if(x != "undefined" && typeof x != 'undefined' && x != null) {
+                                        temp_array.push(x);
+                                }
                         }
+
+                        // Now ensure we do both sides of an expressional operator
+                        argument_list = temp_array;
+                        temp_array = [];
+                        var x_array = [];
+                        var y_array = [];
+                        var x = null;
+                        var y = null;
+                        var temp = null;
+                        while(1) {
+                                // Grab the next value
+                                temp = argument_list.shift();
+                                
+                                // Check if it is time to quit
+                                if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
+                                
+                                // See if we have found a EXOP
+                                if(temp.value == "&" || temp.value == "|") {
+                                        var exop = temp.value;
+                                        // Gather the left side
+                                        while(1) {
+                                                // Grab one
+                                                temp = temp_array.pop();
+                                                // Exit case
+                                                if(temp == "undefined" || typeof temp === 'undefined' || temp == null) {
+                                                        if(x_array.length == 0) {
+                                                                lexer.markError("Expected arguments before expressional operator.");
+                                                                return true;
+                                                        }
+                                                        break;
+                                                }
+                                                console.log(temp);
+                                                x_array.push(temp);
+                                        }
+                                        // Sweet we gathered it, now lets evaluate it
+                                        if(this.evaluateExpression(true,x_array)) return true;
+                                        if(this.expression_result == "undefined" || typeof this.expression_result === 'undefined' || this.expression_result == null) {
+                                                lexer.markError("Internal error X.");
+                                                return true;
+                                        }
+                                        if(this.expression_result.value != 0) x = 1;    // True case
+                                        else x = 0;                                     // False otherwise
+
+
+                                        // gather the right side
+                                        while(1) {
+                                                // Grab one
+                                                temp = argument_list.shift();
+                                                // Exit case
+                                                if(temp == "undefined" || typeof temp === 'undefined' || temp == null) {
+                                                        if(y_array.length == 0) {
+                                                                lexer.markError("Expected arguments before expressional operator.");
+                                                                return true;
+                                                        }
+                                                        break;
+                                                }
+                                                y_array.push(temp);
+                                        }
+
+                                        // Sweet we gathered it, now lets evaluate it
+                                        if(this.evaluateExpression(true,y_array)) return true;
+                                        if(this.expression_result == "undefined" || typeof this.expression_result === 'undefined' || this.expression_result == null) {
+                                                lexer.markError("Internal error Y.");
+                                                return true;
+                                        }
+                                        if(this.expression_result.value != 0) y = 1;  // True case
+                                        else y = 0;                             // False otherwise
+
+                                        // Perform logic
+                                        if(exop == "&") {
+                                                x = x * y;
+                                        }
+                                        else {
+                                                x = x + y;
+                                                if(x != 0) x = 1;
+                                        }
+
+                                        // Sweet we made it man
+                                        argument = {
+                                                "type" : "INTEGER",
+                                                "value": x
+                                        }
+
+                                        temp_array.push(argument);
+                                }
+                                else {
+                                        x = temp;
+                                }
+
+                                if(x != "undefined" && typeof x != 'undefined' && x != null) {
+                                        temp_array.push(x);
+                                }
+                        }                       
 
                         // Do factors now
                         argument_list = temp_array;
@@ -979,8 +1150,8 @@ class Parser {
                                         y = argument_list.shift();
 
                                         // Check if either are undefined
-                                        if((x.type == "undefined" || typeof x.type == 'undefined' || x.type == null) || 
-                                        (y.type == "undefined" || typeof y.type == 'undefined' || y.type == null)) {
+                                        if((x == "undefined" || typeof x == 'undefined' || x == null) || 
+                                        (y == "undefined" || typeof y == 'undefined' || y == null)) {
                                                 lexer.markError("Invalid variable type on operation " + temp.value + ".");
                                                 return true;
                                         }
@@ -1022,7 +1193,6 @@ class Parser {
                         var x = null;
                         var y = null;
                         var temp = null;
-                        console.log(argument_list);
                         while(1) {
                                 // Grab the next value
                                 temp = argument_list.shift();
@@ -1038,8 +1208,8 @@ class Parser {
                                         y = argument_list.shift();
 
                                         // Check if either are undefined
-                                        if(x.type == "undefined" || typeof x.type == 'undefined' || x.type == null || 
-                                        y.type == "undefined" || typeof y.type == 'undefined' || y.type == null) {
+                                        if((x == "undefined" || typeof x == 'undefined' || x == null) || 
+                                        (y == "undefined" || typeof y == 'undefined' || y == null)) {
                                                 lexer.markError("Invalid variable type on operation " + temp.value + ".");
                                                 return true;
                                         }
@@ -1074,17 +1244,19 @@ class Parser {
 
                                 temp_array.push(x);
                         }
-                        console.log(temp_array);
-
-                        // Do relational operators now
-                        argument_list = temp_array;
-                        temp_array = [];
-                        argument_list.forEach(element => {
-                                temp_array.push(element);
-                        });
 
                         argument_list = temp_array;
-                        temp_array = [];
+                        
+                        // Verify argument list is as expected
+                        if(argument_list.length != 1 && !short) {
+                                lexer.markError("Internal error EXPRESSION.");
+                                console.log(argument_list);
+                                return true;
+                        }
+
+                        result = argument_list[0];
+                        // console.log("END RESULT:");
+                        // console.log(result);
                 }
                 else {
                         result = null;
