@@ -507,6 +507,9 @@ class Lexer {
                 messanger.message = message;
                 messanger.line = this.current.line;
                 messanger.putError();
+                messanger.program.parser_ops.push("");
+                messanger.program.parser_ops.push("ERROR: " + message.toUpperCase());
+                messanger.program.parser_ops.push("");
         }
 
         incrimentIndex() {
@@ -542,6 +545,7 @@ class Parser {
                 this.global_symbol_table= new Object();
                 this.symbol_table       = new Object();
                 this.scope              = null;
+                messanger.program.parser_ops.push("BEGIN -> PARSE PROGRAM.");
                 this.switchState("program_start");
                 
                 while(1) {
@@ -591,12 +595,15 @@ class Parser {
                                 this.current_identifier = lexer.current.value;  // This is used for table entrys
                                 this.scope = messanger.program.name;            // This is used for table selection
 
+                                messanger.program.parser_ops.push("BEGIN -> ASSIGNMENT STATEMENT TO: " + lexer.current.value + ", WITHIN SCOPE: " + messanger.program.name + ".");
+
                                 // This is the case that there is a statement in front of the assignment statement, I really dont know what the fuck it is used for
                                 if(lexer.next.value == "[") {
                                         // TODO array stuff
                                         while(lexer.current.value != ']') {
                                                 if(lexer.getToken()) return true;
                                         } 
+                                        messanger.program.parser_ops.push("SKIPPING -> ARRAY DECLARATION.");
                                         lexer.markError("Compiler does not currently support arrays.");
                                 }
 
@@ -613,6 +620,13 @@ class Parser {
                                                 // Main call to generate the assignment
                                                 if(this.evaluateExpression(false,null)) return true;
 
+                                                if(typeof this.expression_result != 'undefined' && this.expression_result != null) {
+                                                        messanger.program.parser_ops.push("VALUE -> ASSIGNMENT STATEMENT EXPRESSION: " + this.expression_result.value + ".");
+                                                }
+                                                else {
+                                                        lexer.markError("Expected assignment to variable: " + this.current_identifier + ".");
+                                                        return true; // P&D for now
+                                                }
                                                 // Check for the end
                                                 if(lexer.current.value != ";") {    
                                                         lexer.markError("Expected end of line character ; .");
@@ -621,6 +635,7 @@ class Parser {
 
                                                 // Store the expression
                                                 if(this.storeSymbol(this.current_identifier,this.expression_result,this.scope)) return true;
+                                                messanger.program.parser_ops.push("COMPLETE -> ASSIGNMENT STATEMENT TO: " + this.current_identifier + ".");
                                         }
                                         else {
                                                 lexer.markError("Expected = .");
@@ -739,6 +754,8 @@ class Parser {
         // Store a value within the table
         storeSymbol(keyword, new_symbol, scope) {
                 let temp_scope = null;
+                // Let the world know
+                messanger.program.parser_ops.push("BEGIN -> SET SYMBOL: " + keyword + ", AS VALUE: " + new_symbol.value + ", WITH TYPE: " + new_symbol.type);
                 // Check the tables
                 if(this.checkTables(keyword, scope)) return true;
                 // IF global, use ... global
@@ -766,23 +783,34 @@ class Parser {
                 // Now assign the value
                 this.master_symbol_table[temp_scope][keyword].type = new_symbol.type;
                 this.master_symbol_table[temp_scope][keyword].value = new_symbol.value;
+                messanger.program.parser_ops.push("COMPLETE -> SET SYMBOL: " + keyword + ", AS VALUE: " + new_symbol.value + ", WITH TYPE: " + new_symbol.type);
                 return false;
         }
 
         // Parse an IF statement
         parseIf() {
+                let path = null;
                 // See if the statement is true
                 if(lexer.next.value == "(") {
+                        messanger.program.parser_ops.push("BEGIN -> IF STATEMENT EVALUATION.");
                         if(this.evaluateExpression(false,null)) return true;
-                        if(lexer.current.value != ")") {
-                                lexer.markError("Expected ending bracket in expression.");
+                        if(typeof this.expression_result != 'undefined' && this.expression_result != null) {
+                                messanger.program.parser_ops.push("VALUE -> IF STATEMENT EXPRESSION: " + this.expression_result.value);
+                                
+                                if(this.expression_result.value != 0) {
+                                        messanger.program.parser_ops.push("DECISION -> IF STATEMENT TRUE.");
+                                        path = 1;
+                                }
+                                else {
+                                        messanger.program.parser_ops.push("DECISION -> IF STATEMENT FALSE.");
+                                        path = 0;
+                                } 
+                        }
+                        else {
+                                lexer.markError("Expected an expression within IF statement.");
                                 return true;
                         }
-                        if(this.expression_result != 0) {
-                                console.log("TRUE.");
-                        }
-                        else console.log("FALSE.");
-                        return true //DEBUG
+                        // Code gen
                 }
                 else {
                         lexer.markError("Expected expression with IF.");
@@ -791,9 +819,19 @@ class Parser {
 
 
                 // IF it is true, parse statements within the THEN
-                if(lexer.next.value == "THEN") {
-                        while(lexer.next.value != "END" || lexer.current.value != "ELSE") {
-                                if(lexer.getToken()) return true;
+                if(lexer.current.value == "THEN") {
+                        if(!path) {
+                                messanger.program.parser_ops.push("DECISION -> SKIPPING ALL STATEMENTS AFTER THEN.");
+                                while(lexer.next.value != "END" && lexer.next.value != "ELSE" && lexer.next.value != ";") {
+                                        if(lexer.getToken()) return true;
+                                }
+                        }
+                        else {
+                                messanger.program.parser_ops.push("DECISION -> PROCESSING STATEMENTS AFTER THEN.");
+                                while(lexer.next.value != "END" && lexer.next.value != "ELSE" && lexer.next.value != ";") {
+                                        
+                                        if(lexer.getToken()) return true;
+                                } 
                         }
                 }
                 else {
@@ -803,15 +841,25 @@ class Parser {
 
                 // IF is is false, see if there is an else
                 if(lexer.next.value == "ELSE") {
-                        while(lexer.next.value != "END") {
-                                if(lexer.getToken()) return true;
-                        }  
+                        if(path) {
+                                messanger.program.parser_ops.push("DECISION -> SKIPPING ALL STATEMENTS AFTER ELSE.");
+                                while(lexer.next.value != "END" && lexer.next.value != ";") {
+                                        if(lexer.getToken()) return true;
+                                } 
+                        }
+                        else {
+                                messanger.program.parser_ops.push("DECISION -> PROCESSING ALL STATEMENTS AFTER ELSE.");
+                                while(lexer.next.value != "END" && lexer.next.value != ";") {
+                                        if(lexer.getToken()) return true;
+                                }
+                        } 
                 }
 
                 // Check for END IF
                 if(lexer.next.value == "END") {
                         if(lexer.getToken()) return true;
                         if(lexer.next.value == "IF") {
+                                messanger.program.parser_ops.push("COMPLETE -> IF STATEMENT EVALUATION.");
                                 if(lexer.getToken()) return true;
                                 return false;
                         }
@@ -829,7 +877,12 @@ class Parser {
                 var argument = null;
                 var result = null;                  // Something to pass back
                 var gathering = true;
-                if(short) gathering = false;        // Gives the option to skip alot
+                if(short)  {
+                        gathering = false;        // Gives the option to skip alot
+                }
+                else {
+                        messanger.program.parser_ops.push("BEGIN -> EXPRESSION EVALUATION.");
+                }
                 // Lets make a decision on what we are about to collect
                 while(gathering) {
                         if(lexer.getToken()) return true;
@@ -947,6 +1000,15 @@ class Parser {
 
                 // Get the correct list
                 if(short) argument_list = list;
+                else {
+                        let index = 0;
+                        let message = "";
+                        while(argument_list[index] != "undefined" && typeof argument_list[index] != 'undefined' && argument_list[index] != null) {
+                                message = message + "[" + argument_list[index].value + "]";
+                                index++;
+                        }
+                        messanger.program.parser_ops.push("BUILT -> EXPRESSION LIST: " + message + ".");
+                }
 
 
                 // Check the list out for length
@@ -992,10 +1054,7 @@ class Parser {
                                         // Grab everything before the operation
                                         temp = argument_list.shift();
                                         var bracket_count = 1;
-                                        while(1) {
-                                                x_array.push(temp);        
-                                                temp = argument_list.shift();
-                                                
+                                        while(1) {        
                                                 // Exit if dead
                                                 if(temp == "undefined" || typeof temp === 'undefined' || temp == null) {
                                                         lexer.markError("Unbalanced parenthesis.");
@@ -1013,6 +1072,9 @@ class Parser {
 
                                                 // Break if done
                                                 if(bracket_count == 0) break;
+
+                                                x_array.push(temp);
+                                                temp = argument_list.shift();
                                         }
                                         // Call thyself
                                         if(this.evaluateExpression(true,x_array)) return true;
@@ -1127,8 +1189,139 @@ class Parser {
                                         temp_array.push(x);
                                 }
                         }
-                        
-                                               
+
+                        // Now ensure we do both sides of a relational operator
+                        argument_list = temp_array;
+                        temp_array = [];
+                        var x_array = [];
+                        var y_array = [];
+                        var x = null;
+                        var y = null;
+                        var temp = null;
+                        while(1) {
+                                // Grab the next value
+                                temp = argument_list.shift();
+                                
+                                // Check if it is time to quit
+                                if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
+                                
+                                // See if we have found a EXOP
+                                if(temp.type == "RLOP") {
+                                        var exop = temp.value;
+                                        temp = null;
+                                        // Gather the left side
+                                        while(1) {
+                                                // Grab one
+                                                temp = temp_array.pop();
+                                                // Exit case
+                                                if(temp == "undefined" || typeof temp === 'undefined' || temp == null) {
+                                                        if(x_array.length == 0) {
+                                                                lexer.markError("Expected arguments before expressional operator.");
+                                                                return true;
+                                                        }
+                                                        break;
+                                                }
+                                                x_array.push(temp);
+                                        }
+                                        // Sweet we gathered it, now lets evaluate it
+                                        if(this.evaluateExpression(true,x_array)) return true;
+                                        if(this.expression_result == "undefined" || typeof this.expression_result === 'undefined' || this.expression_result == null) {
+                                                lexer.markError("Internal error X.");
+                                                return true;
+                                        }
+
+                                        // Assign the result
+                                        x = this.expression_result;
+
+                                        // gather the right side
+                                        temp = null;
+                                        while(1) {
+                                                // Grab one
+                                                temp = argument_list.shift();
+                                                // Exit case
+                                                if(temp == "undefined" || typeof temp === 'undefined' || temp == null) {
+                                                        if(y_array.length == 0) {
+                                                                lexer.markError("Expected arguments after expressional operator.");
+                                                                return true;
+                                                        }
+                                                        break;
+                                                }
+                                                y_array.push(temp);
+                                        }
+
+                                        // Sweet we gathered it, now lets evaluate it
+                                        if(this.evaluateExpression(true,y_array)) return true;
+                                        if(this.expression_result == 'undefined' || typeof this.expression_result === 'undefined' || this.expression_result == null) {
+                                                lexer.markError("Internal error Y.");
+                                                return true;
+                                        }
+
+                                        y = this.expression_result;
+
+                                        // Perform logic
+                                        x.type = "INTEGER";
+                                        y.type = "INTEGER";
+                                        if(exop == "<=") {
+                                                if(x.value <= y.value) {
+                                                        x.value = 1;  // True
+                                                }
+                                                else {
+                                                        x.value = 0;  // True
+                                                }
+                                        }
+                                        else if(exop == ">=") {
+                                                if(x.value >= y.value) {
+                                                        x.value = 1;  // True
+                                                }
+                                                else {
+                                                        x.value = 0;  // True
+                                                }
+                                        }
+                                        else if(exop == "==") {
+                                                if(x.value == y.value) {
+                                                        x.value = 1;  // True
+                                                }
+                                                else {
+                                                        x.value = 0;  // True
+                                                }
+                                        }
+                                        else if(exop == "!=") {
+                                                if(x.value != y.value) {
+                                                        x.value = 1;  // True
+                                                }
+                                                else {
+                                                        x.value = 0;  // True
+                                                }
+                                        }
+                                        else if(exop == ">") {
+                                                if(x.value > y.value) {
+                                                        x.value = 1;  // True
+                                                }
+                                                else {
+                                                        x.value = 0;  // True
+                                                }
+                                        }
+                                        else if(exop == "<") {
+                                                if(x.value < y.value) {
+                                                        x.value = 1;  // True
+                                                }
+                                                else {
+                                                        x.value = 0;  // True
+                                                }
+                                        }
+                                        else {
+                                                lexer.markError("Unsupported type " + exop + ".");
+                                                return true;
+                                        }
+                                }
+                                else {
+                                        x = temp;
+                                }
+
+                                if(x != "undefined" && typeof x != 'undefined' && x != null) {
+                                        temp_array.push(x);
+                                }
+                        }
 
                         // Do factors now
                         argument_list = temp_array;
@@ -1250,6 +1443,10 @@ class Parser {
                         
                         // Verify argument list is as expected
                         if(argument_list.length != 1 && !short) {
+                                if(argument_list.length == 0) {
+                                        this.expression_result = null;
+                                        return false;
+                                }
                                 lexer.markError("Internal error EXPRESSION.");
                                 return true;
                         }
@@ -1734,6 +1931,7 @@ class Parser {
         buildProgramEnd() {
                 if(lexer.current.type == "PRGM" && lexer.next.value == ".") {
                         if(lexer.getToken()) return true;
+                        messanger.program.parser_ops.push("COMPLETE -> PARSE PROGRAM.");
                         return false;
                 }
                 else {
@@ -1746,6 +1944,7 @@ class Parser {
         buildProgramHead() {
                 if(lexer.current.type == "IDEN") {
                         if(lexer.next.type == "IS") {
+                                messanger.program.parser_ops.push("BEGIN -> BUILD PROGRAM HEAD.");
                                 this.global_symbol_table[lexer.current.value] = {        // Grab that shit
                                         "type"          : "STRING",
                                         "value"         : lexer.current.value,
@@ -1754,6 +1953,7 @@ class Parser {
                                 messanger.program.name = lexer.current.value;           // Store the program name
                                 if(lexer.getToken()) return true;                       // Grab that shit
                                 this.switchState("global_declaration");                 // Switch the state
+                                messanger.program.parser_ops.push("COMPLETE -> PROGRAM HEAD VALUE: " + messanger.program.name + ".");
                                 return false;
                         }
                         else {
@@ -1774,6 +1974,7 @@ class Parser {
                 program_end
                 */
                 this.program_state = state                                      // Switch the state
+                messanger.program.parser_ops.push("SWITCH -> STATE: " + state.toUpperCase() + ".");
         }
 
         checkTables(variable_name, scope) {
@@ -1837,6 +2038,7 @@ class Message {
         constructor() {
                 // list of errors
                 this.error_list = [];
+                this.parser_list = [];
                 this.message    = null;
                 this.line       = null;
                 this.flag       = false;
@@ -1846,6 +2048,7 @@ class Message {
                 this.program    = {
                         "name"          : "El Stupido",
                         "variables"     : null,
+                        "parser_ops"    : [],
                         "statements"    : null
                 }
 
@@ -1869,6 +2072,7 @@ class Message {
                 this.program    = {
                         "name"          : "El Stupido",
                         "variables"     : null,
+                        "parser_ops"    : [],
                         "statements"    : null
                 }
 
@@ -1893,6 +2097,7 @@ class Message {
                 this.program    = {
                         "name"          : "El Stupido",
                         "variables"     : null,
+                        "parser_ops"    : [],
                         "statements"    : null
                 }
 

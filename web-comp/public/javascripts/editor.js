@@ -76,30 +76,41 @@ function printResult() {
     var print_result = null;
     switch(state) {
         case "SCANNER":
-        print_result = " << SCANNER OUTPUT >> \n";
+        print_result = "***********SCANNER OUTPUT*********** \n";
+        print_result = "\n";
         front_message.tokens.forEach(function(element) {
             print_result = print_result + "<" + element.type + "," + element.value + "," + (element.line + 1) + "> \n";
         });
         break;
         case "PARSER":
-        print_result = " << PARSER OUTPUT >> \n";
-        print_result = print_result + "<PROGRAM NAME," + front_message.program.name + ">\n";
-        if(front_message.program.variables != null) {
-            print_result = print_result + "<GLOBAL VARIABLES, \n";
-            for(var variable in front_message.program.variables["GLOBAL"]) {
-                print_result = print_result + "(" + variable + "," + front_message.program.variables["GLOBAL"][variable].type + "," + front_message.program.variables["GLOBAL"][variable].value + ")\n";
+        print_result = print_result + "\n";
+        print_result = "***********PARSER OUTPUT*********** \n";
+        print_result = print_result + "\n";
+        print_result = print_result + "PROGRAM NAME: " + front_message.program.name + "\n";
+        print_result = print_result + "\n";
+        print_result = print_result + "************STATEMENTS************* \n";
+        print_result = print_result + "\n";
+        if(front_message.program.parser_ops != null) {
+            for(var operation in front_message.program.parser_ops) {
+                print_result = print_result + front_message.program.parser_ops[operation]  + "\n";
             }
-            print_result = print_result + ">\n";
+        }
+        print_result = print_result + "\n";
+        print_result = print_result + "***********SYMBOL TABLE*********** \n";
+        print_result = print_result + "\n";
+        if(front_message.program.variables != null) {
+            print_result = print_result + "GLOBAL VARIABLES: \n";
+            for(var variable in front_message.program.variables["GLOBAL"]) {
+                print_result = print_result + "[" + variable + "," + front_message.program.variables["GLOBAL"][variable].value + "," + front_message.program.variables["GLOBAL"][variable].type + "]\n";
+            }
             for(var scope in front_message.program.variables) {
                 if(scope != "GLOBAL") {
-                    print_result = print_result + "<" + scope + " VARIABLES, \n";
+                    print_result = print_result + scope + " VARIABLES: \n";
                     for(var variable in front_message.program.variables[scope]) {
-                        print_result = print_result + "(" + variable + "," + front_message.program.variables[scope][variable].type + "," + front_message.program.variables[scope][variable].value + ")\n";
+                        print_result = print_result + "[" + variable + "," + front_message.program.variables[scope][variable].value + "," + front_message.program.variables[scope][variable].type + "]\n";
                     }
-                    print_result = print_result + ">\n";
                 }
             }
-            
         }
         break;
         case "CODE":
@@ -107,13 +118,6 @@ function printResult() {
         break;
         default:
         print_result = " Select an output. \n";
-    }
-    if(front_message.error != true && state == "PARSER") print_result = print_result + "<PROGRAM END>\n";
-    else if(state != "PARSER") {
-        
-    }
-    else {
-        print_result = print_result + "***PROGRAM PARSE FAILURE***\n";
     }
     result.setValue(print_result);
     result.clearSelection();
