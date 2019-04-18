@@ -534,9 +534,8 @@ class Lexer {
 var lexer = new Lexer();
 
 class Parser {
-
-        // Build Program
-        buildProgram() {
+        // Would not be complete without a constructor
+        constructor() {
                 lexer.index             = -1;
                 lexer.current           = null;
                 lexer.next              = null;
@@ -545,9 +544,37 @@ class Parser {
                 this.global_symbol_table= new Object();
                 this.symbol_table       = new Object();
                 this.scope              = null;
-                messanger.program.parser_ops.push("BEGIN -> PARSE PROGRAM.");
-                this.switchState("program_start");
-                
+                // Initialize states object    
+        }       
+
+        // Build Program
+        buildProgram() {
+                if(this.parseProgramMain()) return true;
+        }
+        // **********************New stuff************************
+
+        // parseProgram
+        parseProgram(program_state) {
+                // All table based baby
+                switch(program_state) {
+                        case programStates.START :
+                        return false;
+                        case programStates.DECLARATION :
+                        return false;
+                        case programStates.STATEMENT :
+                        return false;
+                        case programStates.END :
+                        default:
+                        lexer.markError("Internal error.");
+                        return true;
+                }
+
+        }
+
+        // *********************Old stuf**********************
+
+        // parseProgram
+        parseProgramMain() {
                 while(1) {
                         // Advance the token flow
                         if(lexer.getToken()) return true;
@@ -568,7 +595,7 @@ class Parser {
 
                                 // Make sure we are at the start
                                 if(lexer.current.value == "IF") {
-                                        if(this.parseIf()) return true; // P&D for now
+                                        if(this.parseIf(this.scope)) return true; // P&D for now
                                         
                                         if(lexer.next.value != ";") {
                                                 lexer.markError("Expected end of line character ; .");
@@ -748,7 +775,36 @@ class Parser {
                                 return true;
                         }
                 }
+        }
 
+        // parseStatements
+        parseStatement(scope) {
+                // This function collects a single statement so the caller can control the exit statement
+                switch(lexer.next.type) {
+                        case "COND":
+                                if(this.program_state != "global_statement") {
+                                        lexer.markError("Unexepected statement before BEGIN keyword.");
+                                        return true;    // P&D for now 
+                                }
+
+                                // Make sure we are at the start
+                                if(lexer.current.value == "IF") {
+                                        if(this.parseIf(this.scope)) return true; // P&D for now
+                                        
+                                        if(lexer.next.value != ";") {
+                                                lexer.markError("Expected end of line character ; .");
+                                                return true;    // P&D for now
+                                        }
+
+                                        if(lexer.getToken()) return true;
+                                }
+                                else {
+                                        lexer.markError("Unexpected argument " + lexer.current.value + ".");
+                                        return true;    // P&D for now 
+                                }
+                        break;
+
+                }
         }
 
         // Store a value within the table
@@ -788,7 +844,7 @@ class Parser {
         }
 
         // Parse an IF statement
-        parseIf() {
+        parseIf(scope) {
                 let path = null;
                 // See if the statement is true
                 if(lexer.next.value == "(") {
@@ -828,9 +884,10 @@ class Parser {
                         }
                         else {
                                 messanger.program.parser_ops.push("DECISION -> PROCESSING STATEMENTS AFTER THEN.");
-                                while(lexer.next.value != "END" && lexer.next.value != "ELSE" && lexer.next.value != ";") {
-                                        
-                                        if(lexer.getToken()) return true;
+                                while(lexer.next.value != "END" && lexer.next.value != "ELSE") {
+                                        console.log(lexer.next);
+                                        return true;
+                                        if(this.parseStatement(scope)) return true;
                                 } 
                         }
                 }
@@ -2032,7 +2089,6 @@ class Parser {
                 return true;
         }
 }
-var parser = new Parser();
 
 class Message {
         constructor() {
@@ -2150,6 +2206,7 @@ onmessage = function(message) {
 function main(data) {
         // Scanner management
         scanner.update(data);
+        var parser = new Parser();
         parser.buildProgram();
 
         messanger.updateData();

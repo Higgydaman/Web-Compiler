@@ -16,6 +16,7 @@
 1) Math is not really correct......suggest loading the entire expression and then evaluating wiht PEMDAS
 2) Negative numbers is not really working
 3) Need to use try/catch methods for ALL table indexes
+4) Make the display side read only
 
 // Internal errors
 "Internal error 0."
