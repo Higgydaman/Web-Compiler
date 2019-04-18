@@ -608,59 +608,17 @@ class Parser {
                                         if(lexer.next.value == "=") {
                                                 // Advance the token, we know where we are
                                                 if(lexer.getToken()) return true;
-
-                                                // Some pre-call setup
-                                                this.state_assignment = "DIRECT";       // Tells the statement generation that currently it is direct assignment
-                                                this.current_type_assignment = null;    // For type assignment checking
-                                                this.previous_type_assignment = null;   // For type checking
                                                 
                                                 // Main call to generate the assignment
                                                 if(this.evaluateExpression(false,null)) return true;
 
-                                                console.log("ENDING PREMATURE");
-                                                return true;
-
-                                                /* Outcomes from setAssignment() 
-                                                        1) this.current_type_assignment
-                                                        2) this.previous_type_assignment
-                                                        3) this.temp_assignment
-                                                */
-
-                                                // Get the correct table
-                                                if(this.checkTables(this.current_identifier,this.scope)) return true;
-                                                var temp_scope = null;
-                                                if(this.isGlobal) {
-                                                        temp_scope = "GLOBAL";
-                                                }
-                                                else if(this.isLocal) {
-                                                        temp_scope = this.scope;
-                                                }
-                                                else {
-                                                        lexer.markError("Variabel is undeclared.");
-                                                        return true;    // P&D for now 
-                                                }
-
-                                                // perform the type check
-                                                if(this.master_symbol_table[temp_scope][this.current_identifier].type != this.current_type_assignment) {
-                                                        if(this.checkType(temp_scope,this.current_identifier, this.current_type_assignment)) return true;    // P&D for now 
-                                                }
-                                                
-                                                if(this.current_type_assignment == "FLOAT" || this.master_symbol_table[temp_scope][this.current_identifier].type == "FLOAT") {
-                                                        this.master_symbol_table[temp_scope][this.current_identifier].type = "FLOAT";
-                                                }
-                                                else {
-                                                        this.master_symbol_table[temp_scope][this.current_identifier].type      = this.current_type_assignment;
-                                                }
-
-                                                this.master_symbol_table[temp_scope][this.current_identifier].value     = this.temp_assignment;
+                                                // Store the expression
+                                                if(this.storeSymbol(this.current_identifier,this.expression_result,this.scope)) return true;
 
                                                 // Check for the end
-                                                if(lexer.next.value == ";") {
-                                                        if(lexer.getToken()) return true;               
-                                                }
-                                                else {
+                                                if(lexer.current.value != ";") {    
                                                         lexer.markError("Expected end of line character ; .");
-                                                        return true;    // P&D for now 
+                                                        return true;    // P&D for now           
                                                 }
                                         }
                                         else {
@@ -775,6 +733,39 @@ class Parser {
                         }
                 }
 
+        }
+
+        // Store a value within the table
+        storeSymbol(keyword, new_symbol, scope) {
+                let temp_scope = null;
+                // Check the tables
+                if(this.checkTables(keyword, scope)) return true;
+                // IF global, use ... global
+                if(this.isGlobal) temp_scope = "GLOBAL";
+                else if(this.isLocal) temp_scope = scope;
+                else {
+                        lexer.markError("Parameter is undefined " + keyword + ".");
+                        return true;
+                }
+                // Do the type check
+                let type_a = this.master_symbol_table[temp_scope][keyword].type;
+                let type_b = new_symbol.type;
+                if(type_a != type_b) {
+                        if((type_a == "INTEGER" || type_a == "FLOAT" || type_a == "BOOL") 
+                        && (type_b == "INTEGER" || type_b == "FLOAT" || type_b == "BOOL")) {
+                                if(type_a == "BOOL" || type_b == "BOOL") {
+                                        new_symbol.type = "INTEGER";
+                                }
+                        }
+                        else {
+                                lexer.markError("Type " + type_a + " and " + type_b + " are incompatible.");
+                                return true;
+                        } 
+                }
+                // Now assign the value
+                this.master_symbol_table[temp_scope][keyword].type = new_symbol.type;
+                this.master_symbol_table[temp_scope][keyword].value = new_symbol.value;
+                return false;
         }
 
         // Parse an IF statement
