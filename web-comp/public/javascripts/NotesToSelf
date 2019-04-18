@@ -1,6 +1,18 @@
-// token_list = [] of tokens
-                                                                             
-token "EOF" = {
-    type : "EOF"
-}   
+****** MAKE THE PROCEDURE DECLARAION HAVE A VALUE OF ALL TOKENS HELD WITHIN ****
 
+// What has been completed:
+* Complete variable_declaration
+    -> Type_mark done
+    -> bound done
+
+* Completed type_declaration
+
+// Program states
+"global_declaration"
+"global_statement"
+
+
+// Some stuff that is not quite right that I would like to be
+1) Math is not really correct......suggest loading the entire expression and then evaluating wiht PEMDAS
+2) Negative numbers is not really working
+3) Need to use try/catch methods for ALL table indexes

@@ -4,7 +4,7 @@ class Scanner {
 
         constructor() {
                 this.lexeme = null;
-                this.state = null;
+                this.program_state = null;
                 this.body_declaration = false;
         }
 
@@ -106,11 +106,11 @@ class Scanner {
         // Reads until a number is built
         getNumber() {
                 this.number = null;
-                var isfloat = false;
+                this.isfloat = false;
                 var result =  this.current;
                 while(this.next.match(/^[0-9.]+$/)) {
                         if(this.next == '.') {
-                                isfloat = true;
+                                this.isfloat = true;
                                 result = result + this.next;
                                 if(this.incrimentIndex("SCANNER")) {
                                         this.number = result;
@@ -131,7 +131,7 @@ class Scanner {
                                 return;
                         }      
                 }
-                if(isfloat) {
+                if(this.isfloat) {
                         this.number = parseFloat(result);
                 }
                 else {
@@ -166,8 +166,7 @@ class Scanner {
                                                 if(this.incrimentIndex("SCANNER")) return true;          // Incriment the index by one
                                                 break;
 					}
-                                        if(this.incrimentIndex("SCANNER")) return true;
-                                        console.log("2: " + this.current);					
+                                        if(this.incrimentIndex("SCANNER")) return true;					
 				break;
                                 case '/' :						        // Maybe another ghost
                                         if(this.next == '*') {			                // look ahead
@@ -335,7 +334,23 @@ class Scanner {
                         if(this.current.match(this.letters)) {
                                 this.getString();
                                 switch(this.key) {
+                                        // BOOL
+                                        case "TRUE":
+                                        this.type = "INTEGER";
+                                        this.value = 1;
+                                        break;
+
+                                        case "FALSE":
+                                        this.type = "INTEGER";
+                                        this.value = 0;
+                                        break;
                                         
+                                        // END
+                                        case "NOT":
+                                        this.type = "NOT";
+                                        this.value = this.key;
+                                        break;
+
                                         // END
                                         case "END":
                                         this.type = "END";
@@ -344,6 +359,7 @@ class Scanner {
                                         
                                         // BEGIN
                                         case "BEGIN":
+                                        case "THEN":
                                         this.type = "STRT";
                                         this.value = this.key;
                                         break;
@@ -405,7 +421,8 @@ class Scanner {
                         } 
                         else if(this.current.match(this.numbers)) {
                                 this.getNumber();
-                                this.type = "NUMB";
+                                if(this.isfloat) this.type = "FLOAT";
+                                else this.type = "INTEGER";
                                 this.value = this.number;
                         }
                         else if(this.current.match(this.parenthesis)) {
@@ -441,7 +458,6 @@ class Scanner {
                         }  
                 }
                 this.string = result;
-                if(this.incrimentIndex("SCANNER")) return true;
                 return;
         }
 }
@@ -467,7 +483,7 @@ class Lexer {
                                 "type" : "EOF"
                         }
 
-                        return false;
+                        return true;
                 }
 
                 this.token_current = {
@@ -494,7 +510,7 @@ class Lexer {
         }
 
         incrimentIndex() {
-                if(this.index == scanner.lexeme_list.length - 1) {
+                if(this.index >= scanner.lexeme_list.length - 1) {
                         return true;
                 }
                 else {
@@ -521,24 +537,149 @@ class Parser {
                 lexer.index             = -1;
                 lexer.current           = null;
                 lexer.next              = null;
+                this.master_statements  = new Object();
                 this.master_symbol_table= new Object();
                 this.global_symbol_table= new Object();
                 this.symbol_table       = new Object();
                 this.scope              = null;
                 this.switchState("program_start");
                 
-                
                 while(1) {
+                        // Advance the token flow
                         if(lexer.getToken()) return true;
-                        if(this.state == "program_end") {
+
+                        // Test for the end of the program
+                        if(this.program_state == "program_end") {
                                 lexer.markError("Unexpected input after progrqam end.");
                         }
+
+                        // Switch on the current type
                         switch(lexer.current.type) {
+
+                                case "COND":
+                                if(this.program_state != "global_statement") {
+                                        lexer.markError("Unexepected statement before BEGIN keyword.");
+                                        return true;    // P&D for now 
+                                }
+
+                                // Make sure we are at the start
+                                if(lexer.current.value == "IF") {
+                                        if(this.parseIf()) return true; // P&D for now
+                                        
+                                        if(lexer.next.value != ";") {
+                                                lexer.markError("Expected end of line character ; .");
+                                                return true;    // P&D for now
+                                        }
+
+                                        if(lexer.getToken()) return true;
+                                }
+                                else {
+                                        lexer.markError("Unexpected argument " + lexer.current.value + ".");
+                                        return true;    // P&D for now 
+                                }
+                                break;
+                                
+                                // IDENTIFIER case, mostly assignment statements
+                                case "IDEN":
+                                // If we are not in the global statement state, error out
+                                if(this.program_state != "global_statement") {
+                                        lexer.markError("Unexepected statement before BEGIN keyword.");
+                                        return true;    // P&D for now 
+                                }
+
+                                // Set the global variable false for now
+                                this.current_identifier = lexer.current.value;  // This is used for table entrys
+                                this.scope = messanger.program.name;            // This is used for table selection
+
+                                // This is the case that there is a statement in front of the assignment statement, I really dont know what the fuck it is used for
+                                if(lexer.next.value == "[") {
+                                        // TODO array stuff
+                                        while(lexer.current.value != ']') {
+                                                if(lexer.getToken()) return true;
+                                        } 
+                                }
+
+                                // This is the main test for assignment statement
+                                if(lexer.next.value == ":") {
+                                        // Advance the token, we know where we are
+                                        if(lexer.getToken()) return true;
+
+                                        // next token expected
+                                        if(lexer.next.value == "=") {
+                                                // Advance the token, we know where we are
+                                                if(lexer.getToken()) return true;
+
+                                                // Some pre-call setup
+                                                this.state_assignment = "DIRECT";       // Tells the statement generation that currently it is direct assignment
+                                                this.current_type_assignment = null;    // For type assignment checking
+                                                this.previous_type_assignment = null;   // For type checking
+                                                
+                                                // Main call to generate the assignment
+                                                if(this.evaluateExpression()) return true;
+
+                                                console.log("ENDING PREMATURE");
+                                                return true;
+
+                                                /* Outcomes from setAssignment() 
+                                                        1) this.current_type_assignment
+                                                        2) this.previous_type_assignment
+                                                        3) this.temp_assignment
+                                                */
+
+                                                // Get the correct table
+                                                if(this.checkTables(this.current_identifier,this.scope)) return true;
+                                                var temp_scope = null;
+                                                if(this.isGlobal) {
+                                                        temp_scope = "GLOBAL";
+                                                }
+                                                else if(this.isLocal) {
+                                                        temp_scope = this.scope;
+                                                }
+                                                else {
+                                                        lexer.markError("Variabel is undeclared.");
+                                                        return true;    // P&D for now 
+                                                }
+
+                                                // perform the type check
+                                                if(this.master_symbol_table[temp_scope][this.current_identifier].type != this.current_type_assignment) {
+                                                        if(this.checkType(temp_scope,this.current_identifier, this.current_type_assignment)) return true;    // P&D for now 
+                                                }
+                                                
+                                                if(this.current_type_assignment == "FLOAT" || this.master_symbol_table[temp_scope][this.current_identifier].type == "FLOAT") {
+                                                        this.master_symbol_table[temp_scope][this.current_identifier].type = "FLOAT";
+                                                }
+                                                else {
+                                                        this.master_symbol_table[temp_scope][this.current_identifier].type      = this.current_type_assignment;
+                                                }
+
+                                                this.master_symbol_table[temp_scope][this.current_identifier].value     = this.temp_assignment;
+
+                                                // Check for the end
+                                                if(lexer.next.value == ";") {
+                                                        if(lexer.getToken()) return true;               
+                                                }
+                                                else {
+                                                        lexer.markError("Expected end of line character ; .");
+                                                        return true;    // P&D for now 
+                                                }
+                                        }
+                                        else {
+                                                lexer.markError("Expected = .");
+                                                return true;    // P&D for now  
+                                        }
+                                }
+                                else {
+                                        lexer.markError("Expected := .");
+                                        return true;    // P&D for now
+                                }
+
+                                break;
+                                
                                 case "DECN":
                                 // Set the global variable false for now
                                 this.current_scope_isGlobal = false;
                                 this.scope = messanger.program.name;
-                                if(this.state == "global_declaration") {
+                                if(this.program_state == "global_declaration") {
                                         // Check if global scope 
                                         if(lexer.current.value == "GLOBAL") {
                                                 this.current_scope_isGlobal = true;
@@ -556,11 +697,8 @@ class Parser {
                                                 return true; // P&D for now
                                         }
 
-                                        if(!this.current_scope_isGlobal) {
-                                                this.master_symbol_table[this.scope] = this.symbol_table;
-                                                this.master_symbol_table["GLOBAL"] = this.global_symbol_table;
-                                                
-                                        }
+                                        this.master_symbol_table[this.scope] = this.symbol_table;
+                                        this.master_symbol_table["GLOBAL"] = this.global_symbol_table;
                                 }
                                 else {
                                         lexer.markError("Unexpected declaration after BEGIN keyword.");
@@ -581,7 +719,7 @@ class Parser {
                                 }
 
                                 case "STRT":
-                                if(this.state == "global_declaration") {
+                                if(this.program_state == "global_declaration") {
                                         this.switchState("global_statement");
                                 }
                                 else {
@@ -591,7 +729,7 @@ class Parser {
                                 break;
 
                                 case "END":
-                                if(this.state == "global_statement") {
+                                if(this.program_state == "global_statement") {
                                         if(lexer.next.type == "PRGM") {
                                                 this.switchState("program_end");
                                                 if(lexer.getToken()) return true;
@@ -616,7 +754,7 @@ class Parser {
                                 break;
 
                                 case "ENDP":
-                                if(this.state == "end_of_program") {
+                                if(this.program_state == "end_of_program") {
                                         if(lexer.next.type == "EOF") {
                                                 return false;
                                         }
@@ -632,13 +770,568 @@ class Parser {
                                 return true;    // P&D for now
 
                                 default:
-                                lexer.markError("Unexpected input.");
+                                lexer.markError("Unexpected input " + lexer.current.value + ".");
                                 return true;
                         }
                 }
 
         }
 
+        // Parse an IF statement
+        parseIf() {
+                // See if the statement is true
+                if(lexer.next.value == "(") {
+                        if(this.evaluateExpression()) return true;
+                        if(lexer.next.value != ")") {
+                                lexer.markError("Expected ending bracket in expression.");
+                                return true;
+                        }
+                        if(lexer.getToken())  return true;
+                }
+                else {
+                        lexer.markError("Expected expression with IF.");
+                        return true;
+                }
+
+
+                // IF it is true, parse statements within the THEN
+                if(lexer.next.value == "THEN") {
+                        while(lexer.next.value != "END" || lexer.current.value != "ELSE") {
+                                if(lexer.getToken()) return true;
+                        }
+                }
+                else {
+                        lexer.markError("Expected THEN keyword before statements.");
+                        return true;
+                }
+
+                // IF is is false, see if there is an else
+                if(lexer.next.value == "ELSE") {
+                        while(lexer.next.value != "END") {
+                                if(lexer.getToken()) return true;
+                        }  
+                }
+
+                // Check for END IF
+                if(lexer.next.value == "END") {
+                        if(lexer.getToken()) return true;
+                        if(lexer.next.value == "IF") {
+                                if(lexer.getToken()) return true;
+                                return false;
+                        }
+                }
+
+                // They did not end
+                lexer.markError("Expected END IF.");
+                return true;
+        }
+
+        // Evaluate Expression
+        evaluateExpression() {
+                // Before we make the call we need to do this shit
+                var argument_list = [];             // Something to store everything in
+                var argument = null;
+                var result = null;                  // Something to pass back
+                var gathering = true;
+                // Lets make a decision on what we are about to collect
+                while(gathering) {
+                        if(lexer.getToken()) return true;
+                        argument = null;
+                        switch(lexer.current.type) {
+                                case "(":
+                                // TODO
+                                break;
+                                case "AROP":
+                                switch(lexer.current.value) {
+                                        case "+":
+                                        argument = {
+                                                "type"  : "AROP",
+                                                "value" : "+"
+                                        }
+                                        argument_list.push(argument);
+                                        break;
+                                        case "-":
+                                        argument = {
+                                                "type"  : "AROP",
+                                                "value" : "-"
+                                        }
+                                        argument_list.push(argument);
+                                        break;
+                                        case "*":
+                                        argument = {
+                                                "type"  : "FACTOR",
+                                                "value" : "*"
+                                        }
+                                        argument_list.push(argument);
+                                        break;
+                                        case "/":
+                                        argument = {
+                                                "type"  : "FACTOR",
+                                                "value" : "/"
+                                        }
+                                        argument_list.push(argument);
+                                        break;
+                                        default:
+                                        lexer.markError("Unexpected arithmatic operator " + lexer.current.value + ".");
+                                        gathering = false;
+                                }
+                                break;
+                                case "IDEN":
+                                if(this.getSymbol(lexer.current.value)) return true; // Get the symbol
+                                argument = {
+                                        "type"  : this.symbol.type,
+                                        "value" : this.symbol.value
+                                }
+                                argument_list.push(argument);
+                                break;
+                                case "STRG":
+                                if(lexer.getToken()) return true;
+                                argument = {
+                                        "type"  : "STRING",
+                                        "value" : lexer.current.value
+                                }
+                                argument_list.push(argument);
+                                break;
+                                case "INTEGER":
+                                argument = {
+                                        "type"  : "INTEGER",
+                                        "value" : lexer.current.value
+                                }
+                                argument_list.push(argument);
+                                break;
+                                case "FLOAT":
+                                argument = {
+                                        "type"  : "FLOAT",
+                                        "value" : lexer.current.value
+                                }
+                                argument_list.push(argument);
+                                break;
+                                case "NOT":
+                                argument = {
+                                        "type"  : "NOT",
+                                        "value" : -1
+                                }
+                                argument_list.push(argument);
+                                break;
+                                case "RLOP":
+                                case "EXOP":
+                                argument = {
+                                        "type"  : lexer.current.type,
+                                        "value" : lexer.current.value
+                                }
+                                argument_list.push(argument);
+                                break;
+                                // TODO Include another expression call and a procedure call
+                                default:
+                                // End of expression gathering
+                                gathering = false;
+                                break;
+                        }
+                }
+
+                // Evaluate the expression
+
+                if(argument_list != null) {
+
+                        // Do inner expressions first
+                        var temp_array = [];
+                        var x = null;
+                        var y = null;
+                        var temp = null;
+                        while(1) {
+                                // Grab the next value
+                                temp = argument_list.shift();
+                                
+                                // Check if it is time to quit
+                                if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
+                                
+                                // See if we have found a FACTOR
+                                if(temp.type == "RLOP" || temp.type == "RLOP") {
+                                        // Grab everything before the operation
+                                        
+                                }
+                                else {
+                                        // Else push the temp
+                                        x = temp;
+                                }
+
+                                temp_array.push(x);
+                        }
+
+                        // Do factors now
+                        argument_list = temp_array;
+                        temp_array = [];
+                        var x = null;
+                        var y = null;
+                        var temp = null;
+                        while(1) {
+                                // Grab the next value
+                                temp = argument_list.shift();
+                                
+                                // Check if it is time to quit
+                                if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
+                                
+                                // See if we have found a FACTOR
+                                if(temp.type == "FACTOR") {
+                                        // Grab a new x value
+                                        x = temp_array.pop();
+                                        // Grab a new y value
+                                        y = argument_list.shift();
+
+                                        // Check if either are undefined
+                                        if((x.type == "undefined" || typeof x.type == 'undefined' || x.type == null) || 
+                                        (y.type == "undefined" || typeof y.type == 'undefined' || y.type == null)) {
+                                                lexer.markError("Invalid variable type on operation " + temp.value + ".");
+                                                return true;
+                                        }
+
+                                        // Type check
+                                        if(!(x.type == "INTEGER" || x.type == "BOOL" || x.type == "FLOAT") 
+                                        || !(y.type == "INTEGER" || y.type == "BOOL" || y.type == "FLOAT")) {
+                                                lexer.markError("Invalid variable type on operation " + temp.value + ".");
+                                                return true;
+                                        }
+
+                                        // IF either are FLOAT the result is a float
+                                        if(x.value == "FLOAT" || y.value == "FLOAT") {
+                                                x.type = "FLOAT";
+                                        }
+                                        // Get the new value
+                                        if(temp.value == "*") {
+                                                x.value = x.value * y.value;
+                                        }
+                                        else if(temp.value == "/") {
+                                                x.value = x.value / y.value;
+                                        }
+                                        else {
+                                                lexer.markError("Internal error.");
+                                                return true;
+                                        }
+                                }
+                                else {
+                                        // Else push the temp
+                                        x = temp;
+                                }
+
+                                temp_array.push(x);
+                        }
+
+                        // Do AROP now
+                        argument_list = temp_array;
+                        temp_array = [];
+                        var x = null;
+                        var y = null;
+                        var temp = null;
+                        console.log(argument_list);
+                        while(1) {
+                                // Grab the next value
+                                temp = argument_list.shift();
+                                
+                                // Check if it is time to quit
+                                if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
+                                
+                                // See if we have found a FACTOR
+                                if(temp.type == "AROP") {
+                                        // Grab a new x value
+                                        x = temp_array.pop();
+                                        // Grab a new y value
+                                        y = argument_list.shift();
+
+                                        // Check if either are undefined
+                                        if(x.type == "undefined" || typeof x.type == 'undefined' || x.type == null || 
+                                        y.type == "undefined" || typeof y.type == 'undefined' || y.type == null) {
+                                                lexer.markError("Invalid variable type on operation " + temp.value + ".");
+                                                return true;
+                                        }
+
+                                        // Type check
+                                        if(!(x.type == "INTEGER" || x.type == "BOOL" || x.type == "FLOAT") 
+                                        || !(y.type == "INTEGER" || y.type == "BOOL" || y.type == "FLOAT")) {
+                                                lexer.markError("Invalid variable type on operation " + temp.value + ".");
+                                                return true;
+                                        }
+
+                                        // IF either are FLOAT the result is a float
+                                        if(x.value == "FLOAT" || y.value == "FLOAT") {
+                                                x.type = "FLOAT";
+                                        }
+                                        // Get the new value
+                                        if(temp.value == "+") {
+                                                x.value = x.value + y.value;
+                                        }
+                                        else if(temp.value == "-") {
+                                                x.value = x.value - y.value;
+                                        }
+                                        else {
+                                                lexer.markError("Internal error.");
+                                                return true;
+                                        }
+                                }
+                                else {
+                                        // Else push the temp
+                                        x = temp;
+                                }
+
+                                temp_array.push(x);
+                        }
+                        console.log(temp_array);
+
+                        // Do relational operators now
+                        argument_list = temp_array;
+                        temp_array = [];
+                        argument_list.forEach(element => {
+                                temp_array.push(element);
+                        });
+
+                        argument_list = temp_array;
+                        temp_array = [];
+                }
+                else {
+                        result = null;
+                }
+                 
+
+                this.expression_result = result;
+                return false;
+        }
+
+        // Get a symbol from the appropriate table
+        getSymbol(variable) {
+                // Clear
+                this.symbol = null;
+
+                // Check the global table
+                try {
+                        this.symbol = this.master_symbol_table["GLOBAL"][variable];
+                }
+                catch(TypeError) {
+
+                        // Check the local table
+                        try {
+                                this.symbol = this.master_symbol_table["SCOPE"][variable];;
+                        } 
+                        catch(TypeError) {
+                                lexer.markError("Varaiable undefined.");
+                                return true;
+                        }
+                }
+
+                // Return!
+                return false;
+        }
+
+        // Set Expression
+        setAssignment() {
+                // Pre-evaluation shit
+                var temp_val = null;    // Temporary value to build on
+
+                // Evaluate what types we can have
+                switch(lexer.next.type) {
+
+                        // Case NUMBER
+                        case "AROP":
+                        case "FLOAT":
+                        case "INTEGER":
+                        // Incriment the token flow
+                        if(lexer.getToken()) return true;
+
+                        // Check for the + or -
+                        var sign = null;
+                        if(lexer.current.type == "AROP") {
+                                // Incriment the token flow
+                                if(lexer.getToken()) return true;
+                                if(lexer.current.value == "+") {
+                                        sign = 1;
+                                        
+                                }
+                                else if(lexer.current.value == "-") {
+                                        sign = -1;
+                                }
+                                else {
+                                        lexer.markError("Unexpected arithmatic operator.");
+                                        return true;
+                                }
+                        }
+                        else {
+                                sign = 1;
+                        }
+                        
+                        // Grab the number
+                        if(lexer.current.type == "FLOAT" || lexer.current.type == "INTEGER") {
+                                // Set the current type
+                                this.current_type_assignment = lexer.current.type;
+                                temp_val = sign*lexer.current.value;
+                        }
+                        else {
+                                lexer.markError("Expected number.");
+                                return true;
+                        }
+
+                        break;
+
+                        // Case STRING
+                        case "STRG":
+ 
+                        this.current_type_assignment = "STRING";
+                        // Incriment the token flow
+                        if(lexer.getToken()) return true;
+                        temp_val = lexer.current.value;
+
+                        break;
+
+                        // Case IDENTIFIER
+                        case "IDEN":
+                        // Incriment the token flow
+                        if(lexer.getToken()) return true;
+
+                        // Is it a TRUE keyword?
+                        if(lexer.current.value == "TRUE") {
+                                temp_val = 1;
+                                this.current_type_assignment = "INTEGER";
+                        }
+
+                        // Is it a FALSE keyword?
+                        else if(lexer.current.value == "FALSE") {
+                                temp_val = 0;
+                                this.current_type_assignment = "INTEGER";
+                        }
+
+                        // ELSE it is assummed an identifier
+                        else {
+
+                                // Check if the variable exists within the global scope
+                                if(this.checkTables(lexer.current.value, this.scope)) return true;
+
+                                // Grab the correct table symbol
+                                var symbol = null;
+                                if(this.isGlobal) {
+                                     symbol = this.master_symbol_table["GLOBAL"][lexer.current.value]; 
+                                }
+                                else if(this.isLocal) {
+                                     symbol = this.master_symbol_table[this.scope][lexer.current.value];   
+                                }
+                                else {
+                                        lexer.markError("INTERNAL ERROR.");
+                                        return true;
+                                }
+                                // If the symbol is a bool, lets convert
+                                if(symbol.type == "BOOL") {
+                                        
+                                        // Set the current type to integer
+                                        this.current_type_assignment = "INTEGER";
+
+                                        // TRUE case
+                                        if(symbol.value == "TRUE") {
+                                                temp_val = 1;
+                                        }
+
+                                        // FALSE case
+                                        else if(symbol.value == "TRUE") {
+                                                temp_val = 0;
+                                        }
+
+                                        // ERROR
+                                        else {
+                                                lexer.markError("Variable does not have a value.");
+                                                return true;
+                                        }
+                                }
+                                // Else just inherit
+                                else {
+                                        this.current_type_assignment = symbol.type;
+                                        temp_val = symbol.value;
+                                }
+                        }
+                        break;
+                        default:
+                        lexer.markError("Unexpected assignment.");
+                        return true;
+                }
+                
+                switch(this.state_assignment) {
+                        case "DIRECT":
+                        if(temp_val != null) {
+                                this.temp_assignment = temp_val;
+                                this.previous_type_assignment = this.current_type_assignment;
+                        }
+                        else {
+                                lexer.markError("Unexpected input within assignment statement.");
+                                return true;   
+                        }
+                        break;
+
+                        case "MULTIPLY":
+                        case "DIVIDE":
+                        case "ADD":
+                        case "SUBTRACT":
+                        if(this.temp_assignment == null || temp_val == null) {
+                                lexer.markError("Expected a number before multiplying or dividing.");
+                                return true;
+                        }
+
+                        // No, you cannot multiply with a string
+                        if(this.current_type_assignment == "STRING") {
+                                lexer.markError("What the fuck did you expect to happen?");
+                                return true;
+                        }
+
+                        if(this.state_assignment == "MULTIPLY") {
+                                this.temp_assignment = this.temp_assignment * temp_val;
+                        }
+                        else if(this.state_assignment == "ADD") {
+                                this.temp_assignment = this.temp_assignment + temp_val;
+                        }
+                        else if(this.state_assignment == "SUBTRACT") {
+                                this.temp_assignment = this.temp_assignment - temp_val;
+                        }
+                        else {
+                                this.temp_assignment = this.temp_assignment / temp_val;
+                        }
+
+                        break;
+                        default:
+                        lexer.markError("Internal error.");
+                        return true;
+                }
+
+                // Check for array member
+                if(lexer.next.value == '[') {
+                        // TODO array stuff
+                        while(lexer.current.value != ']') {
+                                if(lexer.getToken()) return true;
+                        }
+                }
+
+                // Check if the next is the end
+                switch(lexer.next.value) {
+                        case ";":
+                        return false;
+                        case "*":
+                        this.state_assignment = "MULTIPLY";
+                        if(lexer.getToken()) return true;
+                        if(this.setAssignment()) return true;
+                        break;
+                        case "/":
+                        this.state_assignment = "DIVIDE";
+                        if(lexer.getToken()) return true;
+                        if(this.setAssignment()) return true;
+                        break;
+                        case "+":
+                        this.state_assignment = "ADD";
+                        if(lexer.getToken()) return true;
+                        if(this.setAssignment()) return true;
+                        break;
+                        case "-":
+                        this.state_assignment = "SUBTRACT";
+                        if(lexer.getToken()) return true;
+                        if(this.setAssignment()) return true;
+                        break;
+                        default:
+                        lexer.markError("Expected endline character ; .");
+                        return true;
+                }
+        }
+        
         // Set type
         setType() {
                 if(lexer.current.value != "TYPE") {
@@ -666,9 +1359,6 @@ class Parser {
                         }
                         // If it is some other scope
                         else {
-                                console.log(this.master_symbol_table);
-                                console.log(this.scope);
-                                console.log(lexer.current.value);
                                 if(this.master_symbol_table[this.scope][lexer.current.value] == null) {
                                         lexer.markError("Variable does not exist within this scope scope.");
                                         return true;
@@ -786,7 +1476,7 @@ class Parser {
                         if(lexer.next.value == "-") {
                                 if(lexer.getToken()) return true;
                                 temp_bound = -1*temp_bound;
-                                if(lexer.next.type != "NUMB") {
+                                if(lexer.next.type != "INTEGER") {
                                         lexer.markError("Expected bound number.");
                                         return true; 
                                 }
@@ -806,7 +1496,8 @@ class Parser {
                                 lexer.markError("Expected bound number.");
                                 return true; 
                         }
-                        case "NUMB":
+                        case "FLOAT":
+                        case "INTEGER":
                         if(lexer.getToken()) return true;
                         if(lexer.next.value == "]") {
                                 temp_bound = temp_bound*lexer.token_current.value;
@@ -830,6 +1521,7 @@ class Parser {
                         case  "MARK":
                         if(lexer.getToken()) return true;
                         this.temp_symbol_table[this.current_identifier].type = lexer.current.value;
+
                         if(lexer.current.value == "ENUM") {
                                 if(lexer.getToken()) return true;
                                 if(this.storeEnum()) return true;
@@ -916,8 +1608,62 @@ class Parser {
                 global_statement
                 program_end
                 */
-                this.state = state                                      // Switch the state
-                console.log("STATE SWITCH: " + this.state);             // DEBUG
+                this.program_state = state                                      // Switch the state
+        }
+
+        checkTables(variable_name, scope) {
+                // Pre-check reassignment
+                this.isGlobal   = null;
+                this.isLocal    = null;
+
+                // See if it exists within the global scope
+                try {
+                        if(this.master_symbol_table["GLOBAL"][variable_name] != "undefined") {
+                                this.isGlobal   = true;
+                                this.isLocal    = false;
+                                if(this.master_symbol_table["GLOBAL"][variable_name].value == messanger.program.name) {
+                                        lexer.markError("Cannot use program name.");
+                                        return true; 
+                                }
+                                return false;
+                        }
+                }
+                catch(TypeError) {
+                        try {
+                                if(this.master_symbol_table[scope][variable_name] != "undefined") {
+                                        this.isGlobal   = false;
+                                        this.isLocal    = true;
+                                        return false;
+                                }
+                        }
+                        catch(TypeError) {
+                                lexer.markError("Variable does not exist globally or locally.");
+                                return true;
+                        }
+                }
+        }
+
+        checkType(scope_a, variable_name_a,type_b) {
+                var type_a = this.master_symbol_table[scope_a][variable_name_a].type;
+                this.type = type_a;
+
+                if(type_a == null || type_b == null) {
+                        lexer.markError("Variable type does not exist.");
+                        return true;
+                }
+
+                if(type_a == type_b) {
+                        return false;
+                }
+
+                if(type_a == "BOOL" || type_a == "INTEGER" || type_a == "FLOAT") {
+                        if(type_b == "BOOL" || type_b == "INTEGER" || type_b == "FLOAT") {
+                                return false;
+                        }
+                }
+
+                lexer.markError("Variable types uncomprable.");
+                return true;
         }
 }
 var parser = new Parser();
@@ -935,7 +1681,6 @@ class Message {
                 this.program    = {
                         "name"          : "El Stupido",
                         "variables"     : null,
-                        "declarations"  : null,
                         "statements"    : null
                 }
 
@@ -959,7 +1704,6 @@ class Message {
                 this.program    = {
                         "name"          : "El Stupido",
                         "variables"     : null,
-                        "declarations"  : null,
                         "statements"    : null
                 }
 
@@ -984,7 +1728,6 @@ class Message {
                 this.program    = {
                         "name"          : "El Stupido",
                         "variables"     : null,
-                        "declarations"  : null,
                         "statements"    : null
                 }
 
