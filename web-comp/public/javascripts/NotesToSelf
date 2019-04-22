@@ -28,3 +28,12 @@
                 //                 console.log(temp_array[index]);
                 //                 index++;
                 //         }
+
+// Symbol table entry stamdard stuff 
+this.master_symbol_table[scope][symbol.value] = {
+                        "type"          : null,
+                        "value"         : null,
+                        "bound"         : null,
+                        "enum_list"     : null,
+                        "array"         : []  
+                }

@@ -100,7 +100,7 @@ function printResult() {
         print_result = print_result + "\n";
         if(front_message.program.variables != null) {
             print_result = print_result + "GLOBAL VARIABLES: \n";
-            for(var variable in front_message.program.variables["GLOBAL"]) {
+            for(var variable in front_message.program.variables["global"]) {
                 print_result = print_result + "[" + variable + "," + front_message.program.variables["GLOBAL"][variable].value + "," + front_message.program.variables["GLOBAL"][variable].type + "]\n";
             }
             for(var scope in front_message.program.variables) {
