@@ -338,7 +338,7 @@ class Scanner {
                                         // END
                                         case "NOT":
                                         this.type = "NOT";
-                                        this.value = this.key;
+                                        this.value = "!";
                                         break;
 
                                         // END
@@ -666,7 +666,7 @@ class Parser {
                                         return true;
                                 }
 
-                        } // TYPE PROCEDURE
+                        }
                         else {
                                 this.postError("Expected keyword VARIABLE for declaration.");
                                 return true; 
@@ -685,7 +685,7 @@ class Parser {
                                         return true;
                                 }
                         //#endregion
-                
+
                         //#region -> DEFAULT
                         default:
                         this.postError("Unexpected input for declaration section.");
@@ -770,8 +770,6 @@ class Parser {
                                                         if(this.postExpression(scope)) return true;
                                                         this.operation.type = "assignment";
                                                         this.operation.expression = this.expression_result;
-                                                        console.log("At the storage point.");
-                                                        console.log(this.operation);
                                                         if(this.expression_result.length != 0) {
                                                                 // scoping
                                                                 let temp_scope = scope;
@@ -964,7 +962,6 @@ class Parser {
                                                                 index = true;
                                                                 if(this.getToken()) return true;
                                                                 argument.index = this.current.value;
-                                                                console.log(argument);
                                                                 if(argument.bound < argument.index) {
                                                                         this.postError("Variable array index is out of bounds.");
                                                                         return true;
@@ -1017,13 +1014,6 @@ class Parser {
                                 argument = {
                                         "type"  : "FLOAT",
                                         "value" : this.current.value
-                                }
-                                argument_list.push(argument);
-                                break;
-                                case "NOT":
-                                argument = {
-                                        "type"  : "NOT",
-                                        "value" : -1
                                 }
                                 argument_list.push(argument);
                                 break;
@@ -1108,7 +1098,6 @@ class Parser {
                 }
 
                 // Ok, next up is expressional operators
-                // Before arithmatic and factors, ensure the array is warm enough for them
                 if(temp_array.length == 0) return false;
                 argument_list = temp_array;
                 temp_array = [];
@@ -1172,7 +1161,6 @@ class Parser {
                 }
 
                 // Ok, next up is relational operators
-                // Before arithmatic and factors, ensure the array is warm enough for them
                 if(temp_array.length == 0) return false;
                 argument_list = temp_array;
                 temp_array = [];
@@ -1351,9 +1339,6 @@ class Parser {
                                 }
                                 //Grab a new y value
                                 if(y == "undefined" || typeof y === 'undefined' || y == null) {
-                                        console.log(this.expression_result);
-                                        console.log(x);
-                                        console.log("HERE");
                                         this.postError("Unbalanced expression statement.");
                                         return true;
                                 }
