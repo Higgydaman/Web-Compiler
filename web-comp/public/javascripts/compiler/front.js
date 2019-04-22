@@ -453,64 +453,6 @@ class Scanner {
 }
 var scanner = new Scanner();
 
-class Lexer {
-
-        constructor () {
-                this.token_current = null;
-                this.token_next    = null;
-                this.current       = null;
-        }
-
-        getToken() {
-                // Increase the index
-                this.index += 1;
-                if((this.index + 1) >= scanner.tokens.length) {
-                        this.next = {
-                                "type" : "EOF",
-                                "value": "EOF",
-                                "line" : scanner.tokens[scanner.tokens.length - 1].line
-                        }
-                        if((this.index) >= scanner.tokens.length) {
-                                this.current = {
-                                        "type" : "EOF",
-                                        "value": "EOF",
-                                        "line" : scanner.tokens[scanner.tokens.length - 1].line
-                                } 
-                                return true;
-                        }
-                }
-                else {
-                        this.next    = scanner.tokens[this.index + 1];
-                        this.current = scanner.tokens[this.index];
-                        return false;
-                }
-        }
-
-        markError(message) {
-                
-        }
-
-        incrimentIndex() {
-                if(this.index >= scanner.tokens.length - 1) {
-                        return true;
-                }
-                else {
-                        this.index++;
-                        this.current = scanner.tokens[this.index];
-                        if(this.index >= scanner.tokens.length - 1) {
-                                this.next = {
-                                        "type" : "EOF"
-                                }
-                        }
-                        else {
-                                this.next = scanner.tokens[this.index + 1]
-                        }
-                        return false;
-                }
-        }
-}
-var lexer = new Lexer();
-
 class Parser {
         constructor(tokens) {
                 //#region -> Input verification
@@ -544,6 +486,9 @@ class Parser {
                 
                 //#region -> Get an operation
                 if(this.getOperation("program")) return true;   // Call the operation function
+                if(this.operation.type == this.Operation.Types.start) {
+                        this.program.name = this.operation.value;
+                }
                 this.program.operations.push(this.operation);   // Update the program
                 if(this.state == this.States.end) return false;
                 //#endregion
@@ -566,7 +511,11 @@ class Parser {
                         "assignment"    : 3,
                         "loop"          : 4,
                         "NA"            : 5,
-                        "end"           : 6
+                        "IF"            : 6,
+                        "end_program"   : 7,
+                        "end_if"        : 8,
+                        "ELSE"          : 9,
+                        "end_for"       : 10
                 }
         }
         States = { // Used to drive the parse path
@@ -579,16 +528,13 @@ class Parser {
               //#region -> Gather operation
                 this.operation = {
                         "type"       : null,
-                        "key"        : null,
                         "value"      : null,
-                        "name"       : null,
                         "expression" : null,
                         "operations" : [] 
                 }
                 switch(this.state) {
                         case this.States.start:
                         if(this.getStart()) return true;          // P&D TODO ERROR RECOVERY
-                        this.program.name = this.operation.key;   // For the message back
                         this.state = this.States.declaration;     // Switch state
                         break;
                         case this.States.declaration:
@@ -614,13 +560,13 @@ class Parser {
         getStart() {
                 // Standard start
                 if(this.getToken()) return true;
-                this.operation.type = "start";
+                this.operation.type = this.Operation.Types.start;
 
                 // Check syntax
                 if(this.current.value == "PROGRAM") {
                         if(this.getToken()) return true;
                         if(this.current.type == "IDEN" && this.next.value == "IS") { 
-                                this.operation.key = this.current.value;
+                                this.operation.value = this.current.value;
                                 if(this.getToken()) return true;
                                 return false;
                         }
@@ -694,29 +640,46 @@ class Parser {
                 }
         }
         // parseStatements
-        getStatement(scope) {
-                
+        getStatement(scope, next) {
+
                 if(this.getToken()) return true;
 
                 switch(this.current.type) {
+
+                        //#region -> LOOP
+                        case "LOOP":
+                        // Make sure we are at the start
+                        if(this.current.value == "FOR") {
+                                if(this.postFor(scope)) return true; 
+                                if(this.next.value != ";") {
+                                        this.postError("Expected end of line character ; .");
+                                        return true;   
+                                }
+                                if(this.getToken()) return true;
+                                return false;
+                        }
+                        else {
+                                this.postError("Unexpected argument " + this.current.value + ".");
+                                return true;    // P&D for now 
+                        }
+                        //#endregion
+
                         //#region -> CONDITION
                         case "COND":
-                                // Make sure we are at the start
-                                if(lexer.current.value == "IF") {
-                                        if(this.parseIf(scope)) return true; 
-                                        if(lexer.next.value != ";") {
-                                                lexer.markError("Expected end of line character ; .");
-                                                return true;   
-                                        }
-                                        if(lexer.getToken()) return true;
+                        // Make sure we are at the start
+                        if(this.current.value == "IF") {
+                                if(this.postIf(scope)) return true; 
+                                if(this.next.value != ";") {
+                                        this.postError("Expected end of line character ; .");
+                                        return true;   
                                 }
-                                else {
-                                        lexer.markError("Unexpected argument " + lexer.current.value + ".");
-                                        return true;    // P&D for now 
-                                }
-
-                        // Beat it
-                        break;
+                                if(this.getToken()) return true;
+                                return false;
+                        }
+                        else {
+                                this.postError("Unexpected argument " + this.current.value + ".");
+                                return true;    // P&D for now 
+                        }
                         //#endregion
 
                         //#region -> IDENTIFIER
@@ -768,7 +731,7 @@ class Parser {
 
                                                 if(this.existsGlobally(this.current_identifier) || this.existsLocally(scope, this.current_identifier)) {
                                                         if(this.postExpression(scope)) return true;
-                                                        this.operation.type = "assignment";
+                                                        this.operation.type = this.Operation.Types.assignment;
                                                         this.operation.expression = this.expression_result;
                                                         if(this.expression_result.length != 0) {
                                                                 // scoping
@@ -851,13 +814,23 @@ class Parser {
                                 if(this.next.value == ".") {
                                         if(this.getToken()) return true;
                                         this.state = this.States.end;
-                                        this.operation.type = "end program";
+                                        this.operation.type = this.Operation.Types.end_program;
                                         return false;
                                 }
                                 else {
                                         this.postError("Expected period to end the program.");
                                         return true;
                                 }
+                        }
+                        else if(this.next.value == "IF") {
+                                if(this.getToken()) return true;
+                                this.operation.type = this.Operation.Types.end_if;
+                                return false;
+                        }
+                        else if(this.next.value == "FOR") {
+                                if(this.getToken()) return true;
+                                this.operation.type = this.Operation.Types.end_for;
+                                return false;
                         }
                         else {
                                 this.postError("Unexpected keyword END.");
@@ -871,6 +844,139 @@ class Parser {
                         return true;
                         //#endregion
                 }
+        }
+        postFor(scope) {
+                if(this.getToken()) return true;
+
+                // Lets get the assignment
+                if(this.current.value != "(") {
+                        this.postError("Expected parenthesis for the LOOP statement.");
+                        return true;
+                }
+                this.operation = {
+                        "type"       : null,
+                        "value"      : null,
+                        "expression" : null,
+                        "operations" : [] 
+                }
+                let temp_operation = {
+                        "type"       : null,
+                        "value"      : null,
+                        "expression" : null,
+                        "operations" : [] 
+                }
+                if(this.getStatement(scope)) return true;       // Grab a statement
+                if(this.operation.type != this.Operation.Types.assignment) {
+                        this.postError("Expected assignment statement to start FOR loop.");
+                        return true;
+                }
+                temp_operation.value = this.operation;          // Store that
+
+                this.tokens.unshift(this.next);
+                let temp_token = {
+                        "type" : "BRKT",
+                        "value": '('
+                }
+                this.tokens.unshift(temp_token);
+                this.next = temp_token;
+                this.tokens.shift();
+
+                // Get the expression
+                if(this.postExpression(scope)) return true;
+
+                if(this.expression_result.length == 0) {
+                        this.postError("Expected an expression for IF statement.");
+                        return true;
+                }
+                // Store the resolved expression
+                else temp_operation.expression = this.expression_result;
+
+                // Loop until we see either the "ELSE" keyword or the "END" keyword
+                while(1) {
+                        this.operation = {
+                                "type"       : null,
+                                "value"      : null,
+                                "expression" : null,
+                                "operations" : [] 
+                        }
+                        if(this.getStatement(scope)) return true;
+                        if(this.operation.type == this.Operation.Types.end_program) {
+                                this.postError("Expected END IF to end IF statements. ");
+                                return true;
+                        }
+                        temp_operation.operations.push(this.operation);
+                        if(this.operation.type == this.Operation.Types.end_for) break;
+                }
+
+                this.operation = temp_operation;
+                this.operation.type = this.Operation.Types.loop;
+                return false;
+        }
+        postIf(scope) {
+
+                // Save off the current operation to be saved upon later
+                let temp_operation = {
+                        "type"       : null,
+                        "value"      : null,
+                        "expression" : null,
+                        "operations" : [] 
+                }
+
+                this.operation = {
+                        "type"       : null,
+                        "value"      : null,
+                        "expression" : null,
+                        "operations" : [] 
+                }
+
+                // Get the expression
+                if(this.postExpression(scope)) return true;
+
+                if(this.expression_result.length == 0) {
+                        this.postError("Expected an expression for IF statement.");
+                        return true;
+                }
+                // Store the resolved expression
+                else temp_operation.expression = this.expression_result;
+
+                if(this.current.value != "THEN") {
+                        this.postError("Expected THEN keyword.");
+                        return true;
+                }
+
+                // Loop until we see either the "ELSE" keyword or the "END" keyword
+                while(1) {
+                        this.operation = {
+                                "type"       : null,
+                                "value"      : null,
+                                "expression" : null,
+                                "operations" : [] 
+                        }
+                        if(this.next.value == "ELSE") {
+                                this.operation.type = this.Operation.Types.ELSE;
+                                if(this.getToken()) return true;
+                        }
+                        else {
+                                if(this.getStatement(scope)) return true;
+                                if(this.operation.type == this.Operation.Types.end_program) {
+                                        this.postError("Expected END IF to end IF statements. ");
+                                        return true;
+                                }
+                        }
+                        temp_operation.operations.push(this.operation);
+                        if(this.operation.type == this.Operation.Types.end_if) break;
+                }
+
+                // Shweet we made it
+                if(temp_operation.operations.length == 1) {
+                        this.postError("You just wrote a pointless IF statement. congrats.");
+                        return true;
+                }
+
+
+                this.operation = temp_operation;
+                this.operation.type = this.Operation.Types.IF;
+                return false;
         }
         postExpression(scope) {
                 // Some things we need to keep track of
@@ -903,7 +1009,7 @@ class Parser {
                                 }
                                 else {
                                         this.postError("Unexpected bracket type " + this.current.value + ".");
-                                        gathering = false;
+                                        return true;
                                 }
                                 break;
                                 case "AROP":
@@ -942,6 +1048,15 @@ class Parser {
                                 }
                                 break;
                                 case "IDEN":
+                                if(this.next.value == ":") {
+                                        // Holy fuck back up bro
+                                        this.tokens.unshift(this.next);
+                                        this.tokens.unshift(this.current);
+                                        this.next = this.current;
+                                        this.tokens.shift();
+                                        gathering = false;
+                                        break;
+                                }
                                 if(this.existsGlobally(this.current.value) || this.existsLocally(scope, this.current.value)) {
                                         // So first off, lets see if it has been assigned a value
                                         let temp_scope = scope;
@@ -1019,18 +1134,22 @@ class Parser {
                                 break;
                                 case "RLOP":
                                 case "EXOP":
+                                if(this.current.value == "=") {
+                                        this.postError("Unexpected equals sign within expression.");
+                                        return true;
+                                }
                                 argument = {
                                         "type"  : this.current.type,
                                         "value" : this.current.value
                                 }
                                 argument_list.push(argument);
                                 break;
-                                // TODO Include another expression call and a procedure call
                                 default:
                                 // End of expression gathering
                                 gathering = false;
-                                break;
                         }
+
+                        if(gathering == false) break;
                 }
 
                 // Start the expression 
@@ -1041,9 +1160,14 @@ class Parser {
                         return false;
                 }
                 else return false;
-
         }
         getExpression(scope, argument_list) {
+
+                if(argument_list.length == 1) {
+                        this.expression_result.unshift(argument_list[0]);
+                        return false;
+                }
+
                 // Ok lets save the current and previous types
                 // Alright lets build the expression list
                 // Do all the 
@@ -1405,11 +1529,6 @@ class Parser {
                 messanger.message = message;
                 messanger.line = this.current.line;
                 messanger.putError();
-                console.log("Error dump.");
-                console.log(this.current);
-                console.log(this.next);
-                console.log(this.state);
-                console.log(this.symbol_table);
         }
         postSymbol(scope, is_global) {
 
@@ -1468,8 +1587,6 @@ class Parser {
 
                 // Go an store the type mark
                 if(this.postTypemark(temp_scope, symbol.value)) return true;
-
-                // TODO accept arrays
                 this.operation.type = this.Operation.Types.NA;
                 // Party on Garth
                 return false;
@@ -1583,9 +1700,6 @@ class Parser {
                 }
 
         }
-        // postEnum(scope, name) {
-
-        // }
         //#endregion
 
         //#region -> Token management
@@ -1625,535 +1739,6 @@ class Parser {
         }
         //#endregion       
         
-        //#region TODO
-        buildProgram() {
-                // Just to get started
-                lexer.index             = 0;
-                lexer.current           = null;
-                lexer.next              = null;
-                this.master_statements  = new Object();
-                this.master_symbol_table= new Object();
-                this.global_symbol_table= new Object();
-                this.symbol_table       = new Object();
-                this.scope              = null; 
-                this.switchState("program_start");
-                if(scanner.tokens.length > 1) {
-                        lexer.current  = scanner.tokens[0];
-                        lexer.next =  scanner.tokens[1];
-                }
-                else {
-                        return true;
-                }
-                // Call the main parser
-                this.parseProgramMain();
-                messanger.program.variables = this.master_symbol_table;
-
-        }
-
-        // parseProgram
-        parseProgramMain() {
-                while(1) {
-                        // Test for the end of the program
-                        if(this.program_state == "program_end") {
-                                lexer.markError("Unexpected input after program end.");
-                                return true;
-                        }
-
-                        // Switch on the current type
-                        switch(lexer.current.type) {
-                                // Some statement types
-                                case "COND":
-                                case "IDEN":
-                                // If we are not in the global statement state, error out
-                                if(this.program_state != "global_statement") {
-                                        lexer.markError("Unexepected statement before BEGIN keyword.");
-                                        return true;    // P&D for now 
-                                }
-                                if(parseStatement(this.scope)) return true; // P&D for now
-                                break;
-                                
-                                case "PRGM":
-                                if(lexer.next.type == "IDEN") {
-                                        // Update the tokens.
-                                        if(lexer.getToken()) return true;
-                                        if(this.buildProgramHead()) return true;    // P&D for now      // TODO: call error recovery here
-                                }
-                                else {
-                                        lexer.markError("Expected program identifier.");
-                                        return true;    // P&D for now
-                                }
-                                break;
-
-                                case "END":
-                                if(this.program_state == "global_statement") {
-                                        if(lexer.next.type == "PRGM") {
-                                                this.switchState("program_end");
-                                                // Update the messenger
-                                                messanger.program.variables = this.master_symbol_table;
-                                                return false;
-                                        }
-                                        else {
-                                                lexer.markError("Expected keyword PROGRAM.");
-                                                return true;    // P&D for now
-                                        }        
-                                }
-                                else {
-                                        lexer.markError("Unexpected END keyword within global scope.");
-                                        return true;    // P&D for now
-                                }
-
-                                case "ENDP":
-                                if(this.program_state == "end_of_program") {
-                                        return false;
-                                }
-                                else {
-                                        lexer.markError("Unexpected period within global scope.");
-                                        return true;    // P&D for now
-                                }
-
-                                case "EOF":
-                                lexer.markError("Expected period within global scope.");
-                                return true;    // P&D for now
-
-                                default:
-                                lexer.markError("Unexpected input " + lexer.current.value + ".");
-                                return true;
-                        }
-                }
-        }
-
-        // parseDeclaration
-        parseDeclaration(scope) {
-                // This function collects a single statement so the caller can control the exit statement
-                // messanger.program.parser_ops.push("BEGIN -> PARSING STATEMENT.");
-                switch(lexer.next.type) {
-                        case "DECN":
-                        break;
-
-                }
-        }
-
-        // Parse an IF statement
-        parseIf(scope) {
-                let path = null;
-                // See if the statement is true
-                if(lexer.next.value == "(") {
-                        messanger.program.parser_ops.push("BEGIN -> IF STATEMENT EVALUATION.");
-                        if(this.evaluateExpression(false,null,scope)) return true;
-                        if(typeof this.expression_result != 'undefined' && this.expression_result != null) {
-                                messanger.program.parser_ops.push("VALUE -> IF STATEMENT EXPRESSION: " + this.expression_result.value);
-                                
-                                if(this.expression_result.value != 0) {
-                                        messanger.program.parser_ops.push("DECISION -> IF STATEMENT TRUE.");
-                                        path = 1;
-                                }
-                                else {
-                                        messanger.program.parser_ops.push("DECISION -> IF STATEMENT FALSE.");
-                                        path = 0;
-                                } 
-                        }
-                        else {
-                                lexer.markError("Expected an expression within IF statement.");
-                                return true;
-                        }
-                        // Code gen
-                }
-                else {
-                        lexer.markError("Expected expression with IF.");
-                        return true;
-                }
-
-
-                // IF it is true, parse statements within the THEN
-                if(lexer.current.value == "THEN") {
-                        if(!path) {
-                                messanger.program.parser_ops.push("DECISION -> SKIPPING ALL STATEMENTS AFTER THEN.");
-                                while(lexer.next.value != "END" && lexer.next.value != "ELSE" && lexer.next.value != ";") {
-                                        if(lexer.getToken()) return true;
-                                }
-                        }
-                        else {
-                                messanger.program.parser_ops.push("DECISION -> PROCESSING STATEMENTS AFTER THEN.");
-                                while(lexer.current.value != "END" && lexer.current.value != "ELSE") {
-                                        if(this.parseStatement(scope)) return true;
-                                } 
-                        }
-                }
-                else {
-                        lexer.markError("Expected THEN keyword before statements.");
-                        return true;
-                }
-
-                // IF is is false, see if there is an else
-                if(lexer.next.value == "ELSE") {
-                        if(path) {
-                                messanger.program.parser_ops.push("DECISION -> SKIPPING ALL STATEMENTS AFTER ELSE.");
-                                while(lexer.next.value != "END" && lexer.next.value != ";") {
-                                        if(lexer.getToken()) return true;
-                                } 
-                        }
-                        else {
-                                messanger.program.parser_ops.push("DECISION -> PROCESSING ALL STATEMENTS AFTER ELSE.");
-                                while(lexer.next.value != "END" && lexer.next.value != ";") {
-                                        if(lexer.getToken()) return true;
-                                }
-                        } 
-                }
-
-                // Check for END IF
-                if(lexer.next.value == "END") {
-                        if(lexer.getToken()) return true;
-                        if(lexer.next.value == "IF") {
-                                messanger.program.parser_ops.push("COMPLETE -> IF STATEMENT EVALUATION.");
-                                if(lexer.getToken()) return true;
-                                return false;
-                        }
-                }
-
-                // They did not end
-                lexer.markError("Expected END IF.");
-                return true;
-        }
-
-        // Set Expression
-        setAssignment(scope) {
-                // Pre-evaluation shit
-                var temp_val = null;    // Temporary value to build on
-
-                // Evaluate what types we can have
-                switch(lexer.next.type) {
-
-                        // Case NUMBER
-                        case "AROP":
-                        case "FLOAT":
-                        case "INTEGER":
-                        // Incriment the token flow
-                        if(lexer.getToken()) return true;
-
-                        // Check for the + or -
-                        var sign = null;
-                        if(lexer.current.type == "AROP") {
-                                // Incriment the token flow
-                                if(lexer.getToken()) return true;
-                                if(lexer.current.value == "+") {
-                                        sign = 1;
-                                        
-                                }
-                                else if(lexer.current.value == "-") {
-                                        sign = -1;
-                                }
-                                else {
-                                        lexer.markError("Unexpected arithmatic operator.");
-                                        return true;
-                                }
-                        }
-                        else {
-                                sign = 1;
-                        }
-                        
-                        // Grab the number
-                        if(lexer.current.type == "FLOAT" || lexer.current.type == "INTEGER") {
-                                // Set the current type
-                                this.current_type_assignment = lexer.current.type;
-                                temp_val = sign*lexer.current.value;
-                        }
-                        else {
-                                lexer.markError("Expected number.");
-                                return true;
-                        }
-
-                        break;
-
-                        // Case STRING
-                        case "STRG":
- 
-                        this.current_type_assignment = "STRING";
-                        // Incriment the token flow
-                        if(lexer.getToken()) return true;
-                        temp_val = lexer.current.value;
-
-                        break;
-
-                        // Case IDENTIFIER
-                        case "IDEN":
-                        // Incriment the token flow
-                        if(lexer.getToken()) return true;
-
-                        // Is it a TRUE keyword?
-                        if(lexer.current.value == "TRUE") {
-                                temp_val = 1;
-                                this.current_type_assignment = "INTEGER";
-                        }
-
-                        // Is it a FALSE keyword?
-                        else if(lexer.current.value == "FALSE") {
-                                temp_val = 0;
-                                this.current_type_assignment = "INTEGER";
-                        }
-
-                        // ELSE it is assummed an identifier
-                        else {
-
-                                // Check if the variable exists within the global scope
-                                if(this.checkTables(lexer.current.value, scope, true)) return true;
-
-                                // Grab the correct table symbol
-                                var symbol = null;
-                                if(this.isGlobal) {
-                                     symbol = this.master_symbol_table["GLOBAL"][lexer.current.value]; 
-                                }
-                                else if(this.isLocal) {
-                                     symbol = this.master_symbol_table[scope][lexer.current.value];   
-                                }
-                                else {
-                                        lexer.markError("INTERNAL ERROR.");
-                                        return true;
-                                }
-                                // If the symbol is a bool, lets convert
-                                if(symbol.type == "BOOL") {
-                                        
-                                        // Set the current type to integer
-                                        this.current_type_assignment = "INTEGER";
-
-                                        // TRUE case
-                                        if(symbol.value == "TRUE") {
-                                                temp_val = 1;
-                                        }
-
-                                        // FALSE case
-                                        else if(symbol.value == "TRUE") {
-                                                temp_val = 0;
-                                        }
-
-                                        // ERROR
-                                        else {
-                                                lexer.markError("Variable does not have a value.");
-                                                return true;
-                                        }
-                                }
-                                // Else just inherit
-                                else {
-                                        this.current_type_assignment = symbol.type;
-                                        temp_val = symbol.value;
-                                }
-                        }
-                        break;
-                        default:
-                        lexer.markError("Unexpected assignment.");
-                        return true;
-                }
-                
-                switch(this.state_assignment) {
-                        case "DIRECT":
-                        if(temp_val != null) {
-                                this.temp_assignment = temp_val;
-                                this.previous_type_assignment = this.current_type_assignment;
-                        }
-                        else {
-                                lexer.markError("Unexpected input within assignment statement.");
-                                return true;   
-                        }
-                        break;
-
-                        case "MULTIPLY":
-                        case "DIVIDE":
-                        case "ADD":
-                        case "SUBTRACT":
-                        if(this.temp_assignment == null || temp_val == null) {
-                                lexer.markError("Expected a number before multiplying or dividing.");
-                                return true;
-                        }
-
-                        // No, you cannot multiply with a string
-                        if(this.current_type_assignment == "STRING") {
-                                lexer.markError("What the fuck did you expect to happen?");
-                                return true;
-                        }
-
-                        if(this.state_assignment == "MULTIPLY") {
-                                this.temp_assignment = this.temp_assignment * temp_val;
-                        }
-                        else if(this.state_assignment == "ADD") {
-                                this.temp_assignment = this.temp_assignment + temp_val;
-                        }
-                        else if(this.state_assignment == "SUBTRACT") {
-                                this.temp_assignment = this.temp_assignment - temp_val;
-                        }
-                        else {
-                                this.temp_assignment = this.temp_assignment / temp_val;
-                        }
-
-                        break;
-                        default:
-                        lexer.markError("Internal error.");
-                        return true;
-                }
-
-                // Check for array member
-                if(lexer.next.value == '[') {
-                        // TODO array stuff
-                        while(lexer.current.value != ']') {
-                                if(lexer.getToken()) return true;
-                        }
-                }
-
-                // Check if the next is the end
-                switch(lexer.next.value) {
-                        case ";":
-                        return false;
-                        case "*":
-                        this.state_assignment = "MULTIPLY";
-                        if(lexer.getToken()) return true;
-                        if(this.setAssignment(scope)) return true;
-                        break;
-                        case "/":
-                        this.state_assignment = "DIVIDE";
-                        if(lexer.getToken()) return true;
-                        if(this.setAssignment(scope)) return true;
-                        break;
-                        case "+":
-                        this.state_assignment = "ADD";
-                        if(lexer.getToken()) return true;
-                        if(this.setAssignment(scope)) return true;
-                        break;
-                        case "-":
-                        this.state_assignment = "SUBTRACT";
-                        if(lexer.getToken()) return true;
-                        if(this.setAssignment(scope)) return true;
-                        break;
-                        default:
-                        lexer.markError("Expected endline character ; .");
-                        return true;
-                }
-        }
-        
-        // Set type
-        setType(scope, name) {
-                if(lexer.current.value != "TYPE") {
-                        lexer.markError("Expected keyword TYPE.");
-                        return true;  
-                }
-
-                if(lexer.next.type == "IDEN") {
-                        
-                        if(lexer.getToken()) return true;
-
-                        if(this.checkTables(lexer.current.value,scope, true)) return true;
-
-                        // Update the type
-                        this.current_identifier = lexer.current.value;
-                        if(lexer.next.value == ":") {
-                                if(lexer.getToken()) return true;
-                                // Assign the temporary symbol table
-                                if(this.current_scope_isGlobal) this.temp_symbol_table = this.master_symbol_table["GLOBAL"];
-                                else this.temp_symbol_table = this.master_symbol_table[scope];
-                                if(this.storeTypemark(scope, this.current_identifier)) return true;
-                                if(lexer.next.value == ";") {
-                                        if(lexer.getToken()) return true;
-                                        this.master_symbol_table[scope] = this.temp_symbol_table;
-                                        return false;
-                                }
-                                else {
-                                        lexer.markError("Expected end of line.");
-                                        return true;
-                                }
-                        }
-                        else {
-                                lexer.markError("Expected keyword : .");
-                                return true;   
-                        }
-                }
-                else {
-                        lexer.markError("Expected keyword TYPE.");
-                        return true;
-                }
-        }
-
-        // Store the optional bound
-        storeBound(scope, name) {
-                
-                // Yay
-                if(lexer.next.value != "[") {
-                        lexer.markError("Expected type mark.");
-                        return true;
-                }
-
-                // Incriment the token
-                if(lexer.getToken()) return true;
-
-                switch(lexer.next.type) {
-                        case "INTEGER":
-                        if(lexer.getToken()) return true;
-                        
-                        if(lexer.current.value <= 0) {
-                                lexer.markError("Bound must be an integer greater than 0. I mean just think about it before you type.");
-                                return true;
-                        }
-
-                        if(lexer.next.value == "]") {
-                                this.master_symbol_table[scope][name].bound = lexer.current.value;
-                                if(lexer.getToken()) return true;
-                                return false;
-                        }
-                        else {
-                                lexer.markError("Unbalanced brackets in variable bound.");
-                                return true;
-                        }
-                        default:
-                        lexer.markError("Array bound must be a positive integer greater than 0.");
-                        return true;
-                }                
-        }
-
-        // Store the Enum
-        storeEnum(scope, name) {
-                var list = [];
-                if(lexer.current.value != "{") {
-                        lexer.markError("Expected opening { for enum list.");
-                        return true;
-                }
-                else if(lexer.getToken()) return true;
-                while(lexer.current.value != "}") {
-                        if(lexer.current.type == "IDEN") {
-                                list.push(lexer.current.value);
-                                if(lexer.next.value == ",") {
-                                        if(lexer.getToken()) return true;
-                                }
-                        }
-                        else {
-                                lexer.markError("Unexpected arguement within enum list.");
-                                return true;   
-                        }
-                        if(lexer.getToken()) return true;
-                }
-                this.master_symbol_table[scope][name].enum_list = list;
-                return false;
-        }
-
-        // Wrap the program up
-        buildProgramEnd() {
-                if(lexer.current.type == "PRGM" && lexer.next.value == ".") {
-                        if(lexer.getToken()) return true;
-                        messanger.program.parser_ops.push("COMPLETE -> PARSE PROGRAM.");
-                        return false;
-                }
-                else {
-                        lexer.markError("Expected period to end program.");
-                        return true;
-                }
-        }
-
-        switchState(state) {
-                /* Possible states:
-                global_declaration
-                global_statement
-                program_end
-                */
-                this.program_state = state                                      // Switch the state
-                messanger.program.parser_ops.push("SWITCH -> STATE: " + state.toUpperCase() + ".");
-        }
-
-        //#endregion
 }
 
 class Message {
@@ -2283,11 +1868,9 @@ function main(data) {
 
         //#region -> STEP 3: Parse the tokens
         let parser = new Parser(scanner.tokens.slice());// Initialize the parser
-        let parser_fail = false;                        // Variable to track parser failure
-        if(parser.parseTokens()) parser_fail = true;    // Parse the tokens
-        if(parser_fail) console.log("Parser ended in error.");
-        else console.log("Parser ended successfully.");
-        messanger.program.name = parser.program.name;
+        messanger.flag = parser.parseTokens()           // Parse the tokens
+        messanger.program.name = parser.program.name;   
+        messanger.program.parser_ops = parser.program;
         //#endregion
 
         //#region -> STEP 4: Generate code

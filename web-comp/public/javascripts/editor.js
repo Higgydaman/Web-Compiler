@@ -2,32 +2,90 @@
 
 // TODO: Make a custom mode so that sexy text highlighting happens
 
-/*  Prototype time! 
-*   I am going to make the main thread (this one) the main hub for storage since it is allocated more from the start.
-*   
-*   An interesting issue is memory managent and when to completely restart the front end and when not to. 
-*   I think this issue can be solved by managing the new inputs correctly. 
-*   IF the input is updated, where was it updated? Can we match the overall Lex to the current input? I think so.
-*   IF we parse the input into blocks where the beggining line number is associated with a handful of token, then we can modify JUST those token associted with that line number.
-*   So the call to the scanner is simply an update to the tokens associated with that line number. Then Viola, we have a more dynamic front end.
-*   We may be able to parse by line as well, maybe a stage 1 parse? I think this issue is a problem for future cameron.
-*   I suppose we can just keep parsing until the parser does not see an error, otherwise we could just update the output with the error and line number. Or maybe just the current input error? 
-*   I think we just made an IDE. For simplicity for now, lets just return from the parser a line number where the error occured. 
-*   I also think that maybe the lexer can be tested and implimented as an extremely fast consistant feed back tool within the editor. 
-*
-*   On a update to the editor,
-*   1) Main thread needs to detect a change in just a line number or a change to multiple.....copy and paste is a thing afterall. 
-*   2) To make this editor as dynamic and snappy as possible, it may be smart to spawn a worker PER line update that updates just that line's tokens and then dies upon completion.   
-*   This calls for a good ol fashioned re-write.
-*/
-
-
 // Some globals that are needed, we assume we have at least 4 threads for now
 const front_end = new Worker("/javascripts/compiler/front.js");
 
 document.getElementById("Scanner").addEventListener("click", switch_toScanner);
 document.getElementById("Parser").addEventListener("click", switch_toParser);
 document.getElementById("Code").addEventListener("click", switch_toCode);
+
+
+class Print {
+    Types = {
+        "start"         : 1,
+        "procedure"     : 2,
+        "assignment"    : 3,
+        "loop"          : 4,
+        "NA"            : 5,
+        "IF"            : 6,
+        "end_program"   : 7,
+        "end_if"        : 8,
+        "ELSE"          : 9,
+        "end_for"       : 10
+    }   
+    printParser(ops) {
+        this.print_result = "";
+        parser(ops);
+        result.setValue(this.print_result);
+        result.clearSelection();
+    };
+};
+printer = new Print();
+
+function parser(ops) {
+    ops.forEach(function(operation) {
+        switch(operation.type) {
+            case printer.Types.start:
+            printer.print_result = printer.print_result + "START PROGRAM: " + operation.value + "\n";
+            break;
+            case printer.Types.assignment:
+            printer.print_result = printer.print_result + "ASSIGNMENT -> \n";
+            printer.print_result = printer.print_result + "TO: " + operation.value.key + ",TYPE: " + operation.value.type + ",INDEX " + operation.value.index + ",BOUND: " + operation.value.bound + "\n";
+            printer.print_result = printer.print_result + "FROM EXPRESSION ";
+            operation.expression.forEach(function(argument) {
+                printer.print_result = printer.print_result + "[" + argument.type + "," + argument.value + "]";
+            });
+            printer.print_result = printer.print_result + "\n";
+            break;
+            case printer.Types.loop:
+            printer.print_result = printer.print_result + "LOOP -> \n";
+            printer.print_result = printer.print_result + "VARIABLE: " + operation.value.value.key + ",EXPRESSION: ";
+            operation.value.expression.forEach(function(argument) {
+                printer.print_result = printer.print_result + "[" + argument.type + "," + argument.value + "]";
+            });
+            printer.print_result = printer.print_result + "\n";
+            printer.print_result = printer.print_result + "EXPRESSION: ";
+            operation.expression.forEach(function(argument) {
+                printer.print_result = printer.print_result + "[" + argument.type + "," + argument.value + "]";
+            });
+            printer.print_result = printer.print_result + "\n";
+            printer.print_result = printer.print_result + "OPERATIONS -> ";
+            parser(operation.operations);
+            break;
+            case printer.Types.end_for:
+            printer.print_result = printer.print_result + "END FOR \n";
+            break;
+            case printer.Types.IF:
+            printer.print_result = printer.print_result + "IF STATEMENT -> \n";
+            printer.print_result = printer.print_result + "EXPRESSION: ";
+            operation.expression.forEach(function(argument) {
+                printer.print_result = printer.print_result + "[" + argument.type + "," + argument.value + "]";
+            });
+            printer.print_result = printer.print_result + "\n";
+            parser(operation.operations);
+            break; 
+            case printer.Types.end_if:
+            printer.print_result = printer.print_result + "END IF \n";
+            break;
+            case printer.Types.ELSE:
+            printer.print_result = printer.print_result + "ELSE \n";
+            break;
+            case printer.Types.end_program:
+            printer.print_result = printer.print_result + "END PROGRAM \n";
+            break;
+        }
+    });
+}
 
 function ready() {
     setupEditor();
@@ -83,36 +141,9 @@ function printResult() {
         });
         break;
         case "PARSER":
-        print_result = print_result + "\n";
-        print_result = "***********PARSER OUTPUT*********** \n";
-        print_result = print_result + "\n";
-        print_result = print_result + "PROGRAM NAME: " + front_message.program.name + "\n";
-        print_result = print_result + "\n";
-        print_result = print_result + "************STATEMENTS************* \n";
-        print_result = print_result + "\n";
-        if(front_message.program.parser_ops != null) {
-            for(var operation in front_message.program.parser_ops) {
-                print_result = print_result + front_message.program.parser_ops[operation]  + "\n";
-            }
-        }
-        print_result = print_result + "\n";
-        print_result = print_result + "***********SYMBOL TABLE*********** \n";
-        print_result = print_result + "\n";
-        if(front_message.program.variables != null) {
-            print_result = print_result + "GLOBAL VARIABLES: \n";
-            for(var variable in front_message.program.variables["global"]) {
-                print_result = print_result + "[" + variable + "," + front_message.program.variables["GLOBAL"][variable].value + "," + front_message.program.variables["GLOBAL"][variable].type + "]\n";
-            }
-            for(var scope in front_message.program.variables) {
-                if(scope != "GLOBAL") {
-                    print_result = print_result + scope + " VARIABLES: \n";
-                    for(var variable in front_message.program.variables[scope]) {
-                        print_result = print_result + "[" + variable + "," + front_message.program.variables[scope][variable].value + "," + front_message.program.variables[scope][variable].type + "]\n";
-                    }
-                }
-            }
-        }
-        break;
+        console.log(front_message.program.parser_ops);
+        printer.printParser(front_message.program.parser_ops.operations);
+        return; 
         case "CODE":
         print_result = " << CODE OUTPUT >> \n";
         break;
@@ -182,3 +213,4 @@ begin
 end program.
     `,1); //1 = moves cursor to end
 }
+
