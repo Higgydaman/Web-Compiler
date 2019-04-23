@@ -481,7 +481,7 @@ class Parser {
         //#region -> Public calls that will be made
         parseTokens() {
                 //#region -> Make sure we are initialized, then set some globals
-                if(!this.intialized) return true;       // Return TRUE for failure
+                if(!this.intialized) return true;               // Return TRUE for failure
                 //#endregion
                 
                 //#region -> Get an operation
@@ -490,7 +490,7 @@ class Parser {
                         this.program.name = this.operation.value;
                 }
                 this.program.operations.push(this.operation);   // Update the program
-                if(this.state == this.States.end) return false;
+                if(this.state == this.States.end_program) return false;
                 //#endregion
                 
                 //#region -> Save off that operation
@@ -499,7 +499,6 @@ class Parser {
                 //#region -> End evaluation and continue
                 return this.parseTokens();
                 //#endregion
-        
         }
         //#endregion
 
@@ -515,17 +514,22 @@ class Parser {
                         "end_program"   : 7,
                         "end_if"        : 8,
                         "ELSE"          : 9,
-                        "end_for"       : 10
+                        "end_for"       : 10,
+                        "end_procedure" : 11
                 }
         }
         States = { // Used to drive the parse path
                 "start"         : 1,
                 "declaration"   : 2,
                 "statement"     : 3,
-                "end"           : 4
+                "end"           : 4,
+                Procedure : {
+                        "declaration"   : 5,
+                        "statement"     : 6
+                }
         }
         getOperation(scope){  
-              //#region -> Gather operation
+                //#region -> Gather operation
                 this.operation = {
                         "type"       : null,
                         "value"      : null,
@@ -539,7 +543,8 @@ class Parser {
                         break;
                         case this.States.declaration:
                         if(this.getDeclaration(scope)) return true;// P&D TODO ERROR RECOVERY
-                        if(this.state = this.States.statement) return this.getOperation(scope);
+                        if(this.state == this.States.statement) return this.getOperation(scope);
+                        if(this.operation.type == this.Operation.Types.procedure) return false; // Go store that
                         break;
                         case this.States.statement:
                         if(this.getStatement(scope))  return true;
@@ -613,6 +618,152 @@ class Parser {
                                 }
 
                         }
+                        else if(this.current.value == "PROCEDURE") {
+                                if(this.next.type != "IDEN") {
+                                        this.postError("Unable to parse procedure without a name.");
+                                        return true;
+                                } 
+
+                                // Declare the procedure operation
+                                let temp_operation = {
+                                        "type"       : this.Operation.Types.procedure,
+                                        "value"      : this.next.value,
+                                        "parameters" : [],
+                                        "expression" : [],
+                                        "operations" : [] 
+                                }
+
+                                let temp_state = null;
+                                temp_state = this.state;
+
+                                // Ok, lets post the item in the symbol table
+                                if(this.postSymbol(scope, global)) return true;
+
+                                // Resolve the scope
+                                let temp_scope = scope;
+                                if(this.existsGlobally(temp_operation.value)) temp_scope = "global";
+                                this.symbol_table[temp_scope][temp_operation.value].value = true;
+                                if(this.getToken()) return true;
+
+                                // Ok, now for the parameters
+                                if(this.current.value != "(") {
+                                        this.postError("Expexted brackets ([parameters]) after type mark for procedure.");
+                                        return true;
+                                }
+                                if(this.getToken()) return true;
+                                let gathering = true;
+                                let temp_parameter = {
+                                        "key" : null,
+                                        "type": null
+                                }
+                                while(gathering) {
+                                        switch(this.current.value) {
+                                                case ")":
+                                                gathering = false;
+                                                break;
+                                                case ",":
+                                                break;
+                                                case "VARIABLE":
+                                                if(this.next.type != "IDEN") {
+                                                        this.postError("Expected an identifier for procedure parameter declaration.");
+                                                        return true;
+                                                }
+                                                temp_parameter.key = this.next.value;
+                                                if(this.postSymbol(temp_operation.value, false)) return true;
+                                                temp_parameter.type = this.symbol_table[temp_operation.value][temp_parameter.key].type;
+                                                this.symbol_table[temp_operation.value][temp_parameter.key].value = true;
+                                                temp_operation.parameters.push(temp_parameter);
+                                                temp_parameter = {
+                                                        "key" : null,
+                                                        "type": null
+                                                }
+                                                break;
+                                                default:
+                                                this.postError("Unexpected input " + this.current.value + " within variable parameter declaration.");
+                                                return true;
+                                        }
+                                        if(this.getToken()) return true;
+                                }
+
+                                // Set the current state
+                                this.state = this.States.Procedure.declaration;
+                                gathering = true;
+                                // We need to back up for future calls
+                                this.tokens.unshift(this.next);
+                                this.tokens.unshift(this.current);
+                                this.next = this.current;
+                                this.tokens.shift();
+
+                                while(gathering) {
+                                        switch(this.state) {
+                                                case this.States.Procedure.declaration:
+                                                this.operation = {
+                                                        "type"       : null,
+                                                        "value"      : null,
+                                                        "parameters" : [],
+                                                        "expression" : [],
+                                                        "operations" : [] 
+                                                }
+                                                if(this.getDeclaration(temp_operation.value)) return true;
+                                                if(this.operation.type == this.Operation.Types.procedure) {
+                                                        temp_operation.operations.push(this.operation);
+                                                        this.operation = {
+                                                                "type"       : null,
+                                                                "value"      : null,
+                                                                "parameters" : [],
+                                                                "expression" : [],
+                                                                "operations" : [] 
+                                                        }
+                                                }
+                                                else if(this.state == this.States.Procedure.statement) break;
+                                                else {
+                                                        this.postError("Internal error.");
+                                                        return true;
+                                                }
+                                                break;
+                                                case this.States.Procedure.statement:
+                                                this.operation = {
+                                                        "type"       : null,
+                                                        "value"      : null,
+                                                        "parameters" : [],
+                                                        "expression" : [],
+                                                        "operations" : [] 
+                                                }
+                                                if(this.getStatement(temp_operation.value)) return true;
+                                                if(this.operation.type == this.Operation.Types.end_procedure) gathering = false;
+                                                else if(this.operation == this.Operation.Types.end_program) {
+                                                        this.postError("Expected the END PROCEDURE keywords while parsing procedure.");
+                                                        return true;
+                                                }
+                                                temp_operation.operations.push(this.operation);
+                                                this.operation = {
+                                                        "type"       : null,
+                                                        "value"      : null,
+                                                        "parameters" : [],
+                                                        "expression" : [],
+                                                        "operations" : [] 
+                                                }
+                                                break;
+                                                default:
+                                                this.postError("Unexpected input within procedure declaration.");
+                                                return true;
+                                        }
+                                }
+
+                                this.operation = {
+                                        "type"       : null,
+                                        "value"      : null,
+                                        "parameters" : [],
+                                        "expression" : [],
+                                        "operations" : [] 
+                                }
+
+                                this.operation = temp_operation;
+
+                                // Just in case this has switched
+                                this.state = temp_state;
+                                return false;
+                        }
                         else {
                                 this.postError("Expected keyword VARIABLE for declaration.");
                                 return true; 
@@ -622,14 +773,18 @@ class Parser {
                         
                         //#region -> START
                         case "STRT":
-                                if(this.current.value == "BEGIN") {
-                                        this.state = this.States.statement;
+                        if(this.current.value == "BEGIN") {
+                                if(this.state == this.States.Procedure.declaration) {
+                                        this.state = this.States.Procedure.statement;
                                         return false;
                                 }
-                                else {
-                                        this.postError("Unexpected THEN keyword.");
-                                        return true;
-                                }
+                                this.state = this.States.statement;
+                                return false;
+                        }
+                        else {
+                                this.postError("Unexpected THEN keyword.");
+                                return true;
+                        }
                         //#endregion
 
                         //#region -> DEFAULT
@@ -640,7 +795,7 @@ class Parser {
                 }
         }
         // parseStatements
-        getStatement(scope, next) {
+        getStatement(scope) {
 
                 if(this.getToken()) return true;
 
@@ -737,8 +892,13 @@ class Parser {
                                                                 // scoping
                                                                 let temp_scope = scope;
                                                                 if(this.existsGlobally(this.current_identifier)) temp_scope = "global";
-                                                                this.symbol_table[temp_scope][this.current_identifier].value = true;
-                                                                
+
+                                                                // IF we are NOT in global scope, AND we are in a procedure
+                                                                if(!(this.state == this.States.Procedure.statement && temp_scope == "global")) {
+                                                                        this.symbol_table[temp_scope][this.current_identifier].value = true;
+                                                                }
+                                                        
+
                                                                 // Do some type checking
                                                                 let x_type = this.symbol_table[temp_scope][this.current_identifier].type;
                                                                 let y_type = this.expression_result[this.expression_result.length - 1].type;
@@ -813,7 +973,7 @@ class Parser {
                                 if(this.getToken()) return true;
                                 if(this.next.value == ".") {
                                         if(this.getToken()) return true;
-                                        this.state = this.States.end;
+                                        this.state = this.States.end_program;
                                         this.operation.type = this.Operation.Types.end_program;
                                         return false;
                                 }
@@ -832,6 +992,16 @@ class Parser {
                                 this.operation.type = this.Operation.Types.end_for;
                                 return false;
                         }
+                        else if(this.next.value == "PROCEDURE") {
+                                if(this.getToken()) return true;
+                                this.operation.type = this.Operation.Types.end_procedure;
+                                if(this.next.value != ";") {
+                                        this.postError("expected an end of line character ; to end procedure. ");
+                                        return true;
+                                }
+                                if(this.getToken()) return true;
+                                return false;
+                        }
                         else {
                                 this.postError("Unexpected keyword END.");
                                 return true;
@@ -845,6 +1015,7 @@ class Parser {
                         //#endregion
                 }
         }
+        // BRB
         postFor(scope) {
                 if(this.getToken()) return true;
 
@@ -1061,50 +1232,51 @@ class Parser {
                                         // So first off, lets see if it has been assigned a value
                                         let temp_scope = scope;
                                         if(this.existsGlobally(this.current.value)) temp_scope = "global";
-                                        if(this.symbol_table[temp_scope][this.current.value].value != false) {
-                                                argument = {
-                                                        "key"   : this.current.value,
-                                                        "type"  : this.symbol_table[temp_scope][this.current.value].type,
-                                                        "value" : "IDEN",
-                                                        "index" : 0,
-                                                        "bound" : this.symbol_table[temp_scope][this.current.value].bound
+                                        // If the caller wants to check if the value has been set yet
+                                        if(!(this.state == this.States.Procedure.statement && temp_scope == "global")) {
+                                                if(this.symbol_table[temp_scope][this.current.value].value == false) {
+                                                        this.postError("Variable has not been set yet.");
+                                                        return true;
                                                 }
-                                                let index = false;
-                                                if(this.next.value == "[") {
+                                        }
+                                        argument = {
+                                                "key"   : this.current.value,
+                                                "type"  : this.symbol_table[temp_scope][this.current.value].type,
+                                                "value" : "IDEN",
+                                                "index" : 0,
+                                                "bound" : this.symbol_table[temp_scope][this.current.value].bound
+                                        }
+                                        let index = false;
+                                        if(this.next.value == "[") {
+                                                if(this.getToken()) return true;
+                                                switch(this.next.type) {
+                                                        case "INTEGER":
+                                                        index = true;
                                                         if(this.getToken()) return true;
-                                                        switch(this.next.type) {
-                                                                case "INTEGER":
-                                                                index = true;
-                                                                if(this.getToken()) return true;
-                                                                argument.index = this.current.value;
-                                                                if(argument.bound < argument.index) {
-                                                                        this.postError("Variable array index is out of bounds.");
-                                                                        return true;
-                                                                }
-                                                                if(this.next.value != "]") {
-                                                                        this.postError("Expected ending bracket ] to end bounds declaration.");
-                                                                        return true;
-                                                                        
-                                                                }
-                                                                if(this.getToken()) return true;
-                                                                break;
-                                                                default:
-                                                                this.postError("Unexpected input " + this.current.value + " within bounds assignment.");
+                                                        argument.index = this.current.value;
+                                                        if(argument.bound < argument.index) {
+                                                                this.postError("Variable array index is out of bounds.");
                                                                 return true;
                                                         }
+                                                        if(this.next.value != "]") {
+                                                                this.postError("Expected ending bracket ] to end bounds declaration.");
+                                                                return true;
+                                                                
+                                                        }
+                                                        if(this.getToken()) return true;
+                                                        break;
+                                                        default:
+                                                        this.postError("Unexpected input " + this.current.value + " within bounds assignment.");
+                                                        return true;
                                                 }
-
-                                                // Check if it is an assignment to ALL values within an array
-                                                if((argument.bound > 0) && !index) {
-                                                        argument.index = -1;
-                                                }
-
-                                                argument_list.push(argument);
                                         }
-                                        else {
-                                                this.postError("Variable does not have an assigned value.");
-                                                return true;
+
+                                        // Check if it is an assignment to ALL values within an array
+                                        if((argument.bound > 0) && !index) {
+                                                argument.index = -1;
                                         }
+
+                                        argument_list.push(argument);
                                 }
                                 else {
                                         this.postError("Variable does not exist locally or globally.");
@@ -1529,6 +1701,10 @@ class Parser {
                 messanger.message = message;
                 messanger.line = this.current.line;
                 messanger.putError();
+                console.log("DUMP");
+                console.log(this.current);
+                console.log(this.next);
+                console.log(this.state);
         }
         postSymbol(scope, is_global) {
 
@@ -1654,7 +1830,7 @@ class Parser {
                         break;
                         // The best case, you failing
                         default:
-                        lexer.markError("Expected type mark.");
+                        this.postError("Expected type mark.");
                         return true;
                 }
         }
