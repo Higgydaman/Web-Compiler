@@ -472,9 +472,9 @@ class Parser {
                 this.next = this.tokens.shift();
                 this.errors = [];
                 this.state = this.States.start;
-                this.symbol_table = null;
                 this.symbol_table = new Object();
                 this.enum_count = 0;
+                this.procedure_table = new Object();
                 //#endregion                
         }
 
@@ -599,7 +599,6 @@ class Parser {
                                 global = true;
                                 if(this.getToken()) return true; 
                         }
-                        
                         // IF we are in the right place
                         if(this.current.value == "VARIABLE") {
                                 
@@ -654,7 +653,7 @@ class Parser {
                                 let gathering = true;
                                 let temp_parameter = {
                                         "key" : null,
-                                        "type": null
+                                        "type": null,
                                 }
                                 while(gathering) {
                                         switch(this.current.value) {
@@ -693,7 +692,7 @@ class Parser {
                                 this.tokens.unshift(this.current);
                                 this.next = this.current;
                                 this.tokens.shift();
-
+                                // Build the procedure
                                 while(gathering) {
                                         switch(this.state) {
                                                 case this.States.Procedure.declaration:
@@ -750,6 +749,10 @@ class Parser {
                                         }
                                 }
 
+                                // Add the procedure to the table                
+                                this.procedure_table[temp_operation.value] = temp_operation;
+
+                                // Reset the operation
                                 this.operation = {
                                         "type"       : null,
                                         "value"      : null,
@@ -757,7 +760,7 @@ class Parser {
                                         "expression" : [],
                                         "operations" : [] 
                                 }
-
+                                // Reset the state
                                 this.operation = temp_operation;
 
                                 // Just in case this has switched
@@ -794,7 +797,6 @@ class Parser {
                         //#endregion
                 }
         }
-        // parseStatements
         getStatement(scope) {
 
                 if(this.getToken()) return true;
@@ -876,95 +878,78 @@ class Parser {
                                 if(this.getToken()) return true;
 
                                 // This is the main test for assignment statement
-                                if(this.current.value == ":") {
-
-                                        // Advance the token, we know where we are
-                                        if(this.getToken()) return true;
-
-                                        // next token expected
-                                        if(this.current.value == "=") {
-
-                                                if(this.existsGlobally(this.current_identifier) || this.existsLocally(scope, this.current_identifier)) {
-                                                        if(this.postExpression(scope)) return true;
-                                                        this.operation.type = this.Operation.Types.assignment;
-                                                        this.operation.expression = this.expression_result;
-                                                        if(this.expression_result.length != 0) {
-                                                                // scoping
-                                                                let temp_scope = scope;
-                                                                if(this.existsGlobally(this.current_identifier)) temp_scope = "global";
-
-                                                                // IF we are NOT in global scope, AND we are in a procedure
-                                                                if(!(this.state == this.States.Procedure.statement && temp_scope == "global")) {
-                                                                        this.symbol_table[temp_scope][this.current_identifier].value = true;
-                                                                }
-                                                        
-
-                                                                // Do some type checking
-                                                                let x_type = this.symbol_table[temp_scope][this.current_identifier].type;
-                                                                let y_type = this.expression_result[this.expression_result.length - 1].type;
-                                                                if((x_type == y_type) || ((x_type == "FLOAT" || x_type == "INTEGER" || x_type == "BOOL") && 
-                                                                (y_type == "FLOAT" || y_type == "INTEGER" || y_type == "BOOL"))) {
-                                                                        if(this.current.value == ";") {
-                                                                                // Build an argument for the assignemnt 
-                                                                                // See if this is a complete array assignment
-                                                                                if(!index && this.symbol_table[temp_scope][this.current_identifier].bound > 0) {
-                                                                                        this.current_index = -1;       
-                                                                                }
-                                                                                let argument = {
-                                                                                        "key"   : this.current_identifier,
-                                                                                        "type"  : this.symbol_table[temp_scope][this.current_identifier].type,
-                                                                                        "value" : "IDEN",
-                                                                                        "index" : this.current_index,
-                                                                                        "bound" : this.symbol_table[temp_scope][this.current_identifier].bound
-                                                                                }
-                                                                                // Check the bounds if they assign two array to eachother
-                                                                                for(let i in this.expression_result) {
-                                                                                        if(this.expression_result[i].value == "IDEN") {
-                                                                                                 if(this.expression_result[i].index == -1) {
-                                                                                                         if(this.symbol_table[temp_scope][this.current_identifier].bound != this.expression_result[i].bound) {
-                                                                                                                 this.postError("Array bounds must match for assignment.");
-                                                                                                                 return true;
-                                                                                                         }
-                                                                                                         if(this.current_index != -1) {
-                                                                                                                this.postError("Single array value cannot contain entire other array.");
-                                                                                                                return true;
-                                                                                                         }
-                                                                                                 }
-                                                                                        }
-                                                                                }
-                                                                                this.operation.expression = this.expression_result;
-                                                                                this.operation.value = argument;
-                                                                                return false;
-                                                                        }
-                                                                        else {
-                                                                                this.postError("Expected end of line character ; .");
-                                                                                return true;
-                                                                        }
-                                                                }
-                                                                else {
-                                                                        this.postError("Unable to assign type " + y_type + " to type " + x_type + ".");
-                                                                        return true;
-                                                                }
-                                                        }
-                                                        else {
-                                                                this.postError("Expected an expression to assign to variable " + this.current_identifier +".");
-                                                                return true;
-                                                        }
-                                                }
-                                                else {
-                                                        this.postError("Variable has not been declared locally or globally.");
-                                                        return true;    // P&D for now  
-                                                }
-                                        }
-                                        else {
-                                                this.postError("Expected = .");
-                                                return true;    // P&D for now  
-                                        }
+                                if(this.current.value != ":") {
+                                        this.postError("Expected : .");
+                                        return true;
                                 }
-                                else {
-                                        this.postError("Expected := .");
+                                // Advance the token, we know where we are
+                                if(this.getToken()) return true;
+
+                                // next token expected
+                                if(this.current.value != "=") {
+                                        this.postError("Expected = .");
+                                        return true;    // P&D for now
+                                }  
+
+                                // We do expect it to exist
+                                if(!(this.existsGlobally(this.current_identifier) || this.existsLocally(scope, this.current_identifier))) {
+                                        this.postError("Variable has not been declared locally or globally.");
                                         return true;    // P&D for now
                                 }
+
+                                if(this.postExpression(scope)) return true;
+
+                                this.operation.type = this.Operation.Types.assignment;
+                                this.operation.expression = this.expression_result;
+
+                                if(this.expression_result.length == 0) {
+                                        this.postError("Expected an expression to assign to variable " + this.current_identifier +".");
+                                        return true;
+                                }
+
+                                // scoping
+                                temp_scope = scope;
+                                if(this.existsGlobally(this.current_identifier)) temp_scope = "global";
+
+                                // IF we are NOT in global scope, AND we are in a procedure
+                                if(!(this.state == this.States.Procedure.statement && temp_scope == "global")) {
+                                        this.symbol_table[temp_scope][this.current_identifier].value = true;
+                                }
+
+                                // Do some type checking
+                                let x_type = this.symbol_table[temp_scope][this.current_identifier].type;       // The result
+                                let y_type = this.expression_result[this.expression_result.length - 1].type;    // Litterally just grab one
+
+                                // Type check
+                                if(this.typeCheck(x_type,y_type)) return true;
+
+                                // We expect the end line character
+                                if(this.current.value != ";") { 
+                                        this.postError("Expected end of line character ; .");
+                                        return true;
+                                }
+
+                                // Build an argument for the assignemnt 
+                                // See if this is a complete array assignment
+                                if(!index && this.symbol_table[temp_scope][this.current_identifier].bound > 0) {
+                                        this.current_index = -1;       
+                                }
+
+                                let argument = {
+                                        "key"   : this.current_identifier,
+                                        "type"  : this.symbol_table[temp_scope][this.current_identifier].type,
+                                        "value" : "IDEN",
+                                        "index" : this.current_index,
+                                        "bound" : this.symbol_table[temp_scope][this.current_identifier].bound
+                                }
+
+                                // Check the bounds if they assign two array to eachother                                
+                                if(this.checkBounds(this.symbol_table[temp_scope][this.current_identifier],this.expression_result, this.current_index)) return true;
+
+                                // Store that shit
+                                this.operation.expression = this.expression_result;
+                                this.operation.value = argument;
+                                return false;
                         //#endregion
                         
                         //#region -> END
@@ -1015,7 +1000,6 @@ class Parser {
                         //#endregion
                 }
         }
-        // BRB
         postFor(scope) {
                 if(this.getToken()) return true;
 
@@ -1154,13 +1138,21 @@ class Parser {
                 this.return_type = null;        // Used for the caller to check upon assignment
                 this.expression_result = [];     // Used for the caller to assign wherever
                 let gathering = true;           // Used for token gathering
+                let argument = {
+                        "key"   : null,
+                        "type"  : null,
+                        "value" : null,
+                        "index" : 0,
+                        "bound" : 0,
+                        "expressions" : []
+                }
                 let argument_list = [];         // Token list generated for the expression
 
                 // Gether all the applicable tokens first
                 while(gathering) {
                         if(this.getToken()) return true;
-                        let argument = null;
                         switch(this.current.type) {
+                                //#region -> BRACKET
                                 case "BRKT":
                                 if(this.current.value == "(") {
                                         argument = {
@@ -1182,7 +1174,9 @@ class Parser {
                                         this.postError("Unexpected bracket type " + this.current.value + ".");
                                         return true;
                                 }
-                                break;
+                                //#endregion -> BRACKET
+
+                                //#region -> AROP
                                 case "AROP":
                                 switch(this.current.value) {
                                         case "+":
@@ -1218,6 +1212,9 @@ class Parser {
                                         gathering = false;
                                 }
                                 break;
+                                //#endregion -> AROP
+                                
+                                //#region -> INDETIFIER
                                 case "IDEN":
                                 if(this.next.value == ":") {
                                         // Holy fuck back up bro
@@ -1228,10 +1225,13 @@ class Parser {
                                         gathering = false;
                                         break;
                                 }
+
                                 if(this.existsGlobally(this.current.value) || this.existsLocally(scope, this.current.value)) {
+                                        
                                         // So first off, lets see if it has been assigned a value
                                         let temp_scope = scope;
                                         if(this.existsGlobally(this.current.value)) temp_scope = "global";
+                                        
                                         // If the caller wants to check if the value has been set yet
                                         if(!(this.state == this.States.Procedure.statement && temp_scope == "global")) {
                                                 if(this.symbol_table[temp_scope][this.current.value].value == false) {
@@ -1244,45 +1244,152 @@ class Parser {
                                                 "type"  : this.symbol_table[temp_scope][this.current.value].type,
                                                 "value" : "IDEN",
                                                 "index" : 0,
-                                                "bound" : this.symbol_table[temp_scope][this.current.value].bound
+                                                "bound" : this.symbol_table[temp_scope][this.current.value].bound,
+                                                "expressions" : []
                                         }
-                                        let index = false;
-                                        if(this.next.value == "[") {
-                                                if(this.getToken()) return true;
-                                                switch(this.next.type) {
-                                                        case "INTEGER":
-                                                        index = true;
+
+                                        // Check if there exists a procedure with that identifier
+                                        if(typeof this.procedure_table[this.current.value] == 'undefined' || this.procedure_table[this.current.value] == 'undefined' || this.procedure_table[this.current.value] == null) {
+                                                let index = false;
+                                                if(this.next.value == "[") {
                                                         if(this.getToken()) return true;
-                                                        argument.index = this.current.value;
-                                                        if(argument.bound < argument.index) {
-                                                                this.postError("Variable array index is out of bounds.");
+                                                        switch(this.next.type) {
+                                                                case "INTEGER":
+                                                                index = true;
+                                                                if(this.getToken()) return true;
+                                                                argument.index = this.current.value;
+                                                                if(argument.bound < argument.index) {
+                                                                        this.postError("Variable array index is out of bounds.");
+                                                                        return true;
+                                                                }
+                                                                if(this.next.value != "]") {
+                                                                        this.postError("Expected ending bracket ] to end bounds declaration.");
+                                                                        return true;
+                                                                        
+                                                                }
+                                                                if(this.getToken()) return true;
+                                                                break;
+                                                                default:
+                                                                this.postError("Unexpected input " + this.current.value + " within bounds assignment.");
                                                                 return true;
                                                         }
-                                                        if(this.next.value != "]") {
-                                                                this.postError("Expected ending bracket ] to end bounds declaration.");
-                                                                return true;
-                                                                
-                                                        }
-                                                        if(this.getToken()) return true;
-                                                        break;
-                                                        default:
-                                                        this.postError("Unexpected input " + this.current.value + " within bounds assignment.");
+                                                }
+                                                // Check if it is an assignment to ALL values within an array
+                                                if((argument.bound > 0) && !index) {
+                                                        argument.index = -1;
+                                                }
+                                                argument_list.push(argument);
+                                                break;
+                                        }
+                                        else {
+                                                let procedure = this.procedure_table[this.current.value];
+                                                argument.value = "PROCEDURE";
+
+                                                if(this.next.value != "(") {
+                                                        this.postError("Procedure call requires parameter specification.");
                                                         return true;
                                                 }
-                                        }
 
-                                        // Check if it is an assignment to ALL values within an array
-                                        if((argument.bound > 0) && !index) {
-                                                argument.index = -1;
-                                        }
+                                                // incriment
+                                                if(this.getToken());
 
-                                        argument_list.push(argument);
+                                                let count = 1;          // Count for paranethesis
+                                                let gathering = true;   // Helps to .... gather
+                                                let temp_list = [];     // List to call postExpression with again
+
+                                                while(gathering) {
+                                                        
+                                                        switch(this.next.value) {
+                                                                case ")":       // Ending
+                                                                count = count - 1;
+                                                                if(count == 0) {
+                                                                        if(this.getToken()) return true;
+                                                                        gathering = false;
+                                                                        break;
+                                                                }
+                                                                if(this.getToken()) return true;
+                                                                temp_list.push(this.current);
+                                                                break;
+                                                                case "(":
+                                                                count = count + 1;
+                                                                if(this.getToken()) return true;
+                                                                temp_list.push(this.current);
+                                                                break;
+                                                                case ";":       
+                                                                this.postError("Unbalanced parenthesis on " + procedure.value + ".");
+                                                                return true;
+                                                                default:
+                                                                if(this.getToken()) return true;
+                                                                temp_list.push(this.current);
+                                                        }     
+                                                }
+
+
+                                                if(temp_list.length == 0 && procedure.parameters.length != 0) {
+                                                        this.postError("Arguments were expected within the procedure call.");
+                                                        return true;
+                                                }
+
+                                                if(temp_list.length == 0) {
+                                                        argument_list.push(argument);
+                                                        break;
+                                                }
+
+                                                let temp_result = this.expression_result;
+                                                this.expression_result = [];
+                                                if(this.postProcedure(scope, temp_list)) return true;
+                                                this.expression_result = temp_result;
+
+                                                argument.expressions = this.expressions;
+
+                                                // Check the lengths
+                                                if(argument.expressions.length != procedure.parameters.length) {
+                                                        this.postError("Expected equal arguments as what was declared for the procedure.");
+                                                        return true;
+                                                }
+
+                                                // Ok, now we need to check them types and bounds
+                                                let type = null;
+                                                for(let index in argument.expressions) {
+                                                        for(let item in argument.expressions[index]) {
+                                                                type = argument.expressions[index][item].type;
+                                                                if(type == "INTEGER" || type == "FLOAT" || type =="BOOL") {
+                                                                        if(!(procedure.parameters[index].type == "INTEGER" || procedure.parameters[index].type == "FLOAT" 
+                                                                        || procedure.parameters[index].type == "BOOL")) {
+                                                                                this.postError("Cannot pass type " + type + " to function " + procedure.value + ".");
+                                                                                return true;
+                                                                        }
+                                                                }
+                                                                else if(type == "STRING" && procedure.parameters[index].type != "STRING") {
+                                                                        this.postError("Cannot pass type " + type + " to function " + procedure.value + ".");
+                                                                        return true;
+                                                                }
+
+                                                                if(argument.expressions[index][item].value == "IDEN") {
+                                                                        if(argument.expressions[index][item].index == -1) {
+                                                                                if(this.symbol_table[procedure.value][procedure.parameters[index].key].bound != argument.expressions[index][item].index) {
+                                                                                        this.postError("Array assignments must be within bounds.");
+                                                                                        return true;
+                                                                                } 
+                                                                        }
+                                                                }
+                                                        }
+                                                }
+
+                                                argument_list.push(argument);
+                                                this.next = this.current;
+                                                this.expressions = null;
+                                                break;
+                                        }
                                 }
                                 else {
-                                        this.postError("Variable does not exist locally or globally.");
+                                        this.postError("Variable or procedure does not exist locally or globally.");
                                         return true;
                                 }
                                 break;
+                                //#endregion -> INDETIFIER
+                                
+                                //#region -> STRING
                                 case "STRG":
                                 argument = {
                                         "type"  : "STRING",
@@ -1290,6 +1397,9 @@ class Parser {
                                 }
                                 argument_list.push(argument);
                                 break;
+                                //#endregion -> STRING
+                                
+                                //#region -> INTEGER
                                 case "INTEGER":
                                 argument = {
                                         "type"  : "INTEGER",
@@ -1297,6 +1407,9 @@ class Parser {
                                 }
                                 argument_list.push(argument);
                                 break;
+                                //#endregion -> INTEGER
+
+                                //#region -> FLOAT
                                 case "FLOAT":
                                 argument = {
                                         "type"  : "FLOAT",
@@ -1304,6 +1417,9 @@ class Parser {
                                 }
                                 argument_list.push(argument);
                                 break;
+                                //#endregion -> FLOAT
+
+                                //#region -> RLOP && EXOP
                                 case "RLOP":
                                 case "EXOP":
                                 if(this.current.value == "=") {
@@ -1316,22 +1432,81 @@ class Parser {
                                 }
                                 argument_list.push(argument);
                                 break;
+                                //#endregion -> RLOP && EXOP
+
+                                //#region -> DEFAULT
                                 default:
                                 // End of expression gathering
                                 gathering = false;
+                                //#endregion -> DEFAULT
                         }
-
                         if(gathering == false) break;
                 }
 
                 // Start the expression 
                 if(argument_list.length != 0) {
-                        if(argument_list.length == 0) return false; // Return
                         // Some stuff for the getExpression call
                         if(this.getExpression(scope, argument_list)) return true;
+
+                        // We really need to do a check on the build expression
                         return false;
                 }
                 else return false;
+        }
+        postProcedure(scope, list) {
+                
+                // OK, now call postExpression() for every built list
+                this.expression_result = [];
+                let temp_expression = [];
+                this.expressions = [];
+                let temp_array = [];
+                if(this.next.value != ";") {
+                        this.postError("Expected end of line character.");
+                        return true;
+                }
+                for(let item in list) {
+                        if(list[item].value == ",") {
+                                if(temp_array.length == 0) {
+                                        this.postError("Expected an expression before the , symbol.");
+                                        return true;
+                                }
+                                this.reverseTokens(temp_array);
+                                if(this.postExpression(scope)) return true;
+                                this.tokens.unshift(this.next);
+                                temp_expression.push(this.expression_result);
+                                // argument.expression.push(this.expression_result);
+                                temp_array = [];
+                        }
+                        else {
+                                temp_array.push(list[item]);
+                        }
+                }
+                if(temp_array.length == 0) {
+                        this.postError("Expected an expression.");
+                        return true;
+                }
+                this.reverseTokens(temp_array);
+                if(this.postExpression(scope)) return true;
+                this.tokens.unshift(this.next);
+                temp_expression.push(this.expression_result);
+                this.expressions = temp_expression;
+                return false;
+   
+        }
+        // Reverses a list of tokens for an expression call
+        reverseTokens(list) {
+                // Restore the current NEXT token
+                let temp_token = {
+                        "type" : "ENDL",
+                        "value": ";",
+                        "line" : this.current.line
+                }
+                this.tokens.unshift(temp_token);
+                
+                for(let item in list) {
+                        this.tokens.unshift(list[item]);
+                }
+                this.next = this.tokens.shift();
         }
         getExpression(scope, argument_list) {
 
@@ -1679,32 +1854,11 @@ class Parser {
                 }
                 return false;
         }
-        getSymbol(scope, variable ) {
-                
-                // Clear
-                this.symbol = null;
-
-                // Check the ol tables
-                if(this.checkTables(variable, scope, true)) return true;
-
-                // Assign 
-                if(this.isGlobal) this.symbol = this.symbol_table["global"][variable];
-                else if(this.isLocal) this.symbol = this.symbol_table[scope][variable];
-                else {
-                        this.postError("Varibale " + variable + " does not exist within scope.")
-                }
-
-                // Return!
-                return false;
-        }
         postError(message) {
                 messanger.message = message;
                 messanger.line = this.current.line;
+                if(this.current)
                 messanger.putError();
-                console.log("DUMP");
-                console.log(this.current);
-                console.log(this.next);
-                console.log(this.state);
         }
         postSymbol(scope, is_global) {
 
@@ -1765,37 +1919,6 @@ class Parser {
                 if(this.postTypemark(temp_scope, symbol.value)) return true;
                 this.operation.type = this.Operation.Types.NA;
                 // Party on Garth
-                return false;
-        }
-        // Store a value within the table
-        updateSymbol(scope, keyword, new_symbol) {
-                let temp_scope = null;
-                // Check the tables
-                this.wanted = true;
-                if(this.checkTables(scope, keyword)) return true;
-                
-                // IF global, use ... global
-                if(this.isGlobal) temp_scope = "global";
-                else if(this.isLocal) temp_scope = scope;
-                else {
-                        this.postError("Parameter is undefined " + keyword + ".");
-                        return true;
-                }
-                // Do the type check
-                let type_a = this.symbol_table[temp_scope][keyword].type;
-                let type_b = new_symbol.type;
-                if(type_a != type_b) {
-                        if((type_a == "INTEGER" || type_a == "FLOAT" || type_a == "BOOL") 
-                        && (type_b == "INTEGER" || type_b == "FLOAT" || type_b == "BOOL")) {
-                                if(type_a == "BOOL" || type_b == "BOOL") {
-                                        new_symbol.type = "INTEGER";
-                                }
-                        }
-                        else {
-                                this.postError("Type " + type_a + " and " + type_b + " are incompatible.");
-                                return true;
-                        } 
-                }
                 return false;
         }
         postTypemark(scope, name) {
@@ -1875,6 +1998,60 @@ class Parser {
                         return true;
                 }
 
+        }
+        typeCheck(type1,type2) {
+                if(type1 == "INTEGER") {
+                        if(type2 == "INTEGER" || type2 == "BOOL" || type2 == "FLOAT") {
+                                return false;
+                        }
+                        else {
+                                this.postError("Incompatible type " + type1 + " and " + type2);
+                                return true;
+                        }
+                }
+                else if(type1 == "BOOL") {
+                        if(type2 == "INTEGER" || type2 == "BOOL") {
+                                return false;
+                        }
+                        else {
+                                this.postError("Incompatible type " + type1 + " and " + type2);
+                                return true;
+                        }
+                }
+                else if(type1 == "FLOAT") {
+                        if(type2 == "INTEGER" || type2 == "FLOAT") {
+                                return false;
+                        }
+                        else {
+                                this.postError("Incompatible type " + type1 + " and " + type2);
+                                return true;
+                        }
+                }
+                else if(type1 != type2) {
+                        this.postError("Incompatible type " + type1 + " and " + type2);
+                        return true;
+                }
+                
+                return false;
+        }
+        checkBounds(symbol, expression, index) {
+                for(let i in expression) {
+                        if(expression[i].value == "IDEN") {
+                                if(expression[i].index == -1) {
+                                        
+                                        if(symbol.bound != expression[i].bound) {
+                                                this.postError("Array bounds must match for assignment.");
+                                                return true;
+                                        }
+
+                                        if(index != -1) {
+                                                this.postError("Single array value cannot contain entire other array.");
+                                                return true;
+                                        }
+                                }
+                        }
+                }
+                return false;
         }
         //#endregion
 
@@ -2007,19 +2184,6 @@ class Message {
                 this.error_list.push({"msg" : this.message, "line" : this.line});
                 return;
         }
-
-        putName(name) {
-                return;
-        }
-
-        putDeclaration(declaration) {
-                return;
-        }
-
-        putStatement(statement) {
-                return;
-        }
-
 }
 var messanger = new Message();
 /* Front expects:
