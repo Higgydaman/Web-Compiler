@@ -27,6 +27,8 @@ class Print {
     printParser(ops) {
         this.print_result = "";
         parser(ops, 0);
+        this.print_result = this.print_result + "COMPLETE PROGRAM STRUCTURE IN MEMORY:";
+        this.print_result = this.print_result + JSON.stringify(ops, undefined, 5);
         result.setValue(this.print_result);
         result.clearSelection();
     };

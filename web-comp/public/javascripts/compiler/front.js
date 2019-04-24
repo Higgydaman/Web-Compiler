@@ -515,7 +515,8 @@ class Parser {
                         "end_if"        : 8,
                         "ELSE"          : 9,
                         "end_for"       : 10,
-                        "end_procedure" : 11
+                        "end_procedure" : 11,
+                        "return"        : 12
                 }
         }
         States = { // Used to drive the parse path
@@ -684,6 +685,10 @@ class Parser {
                                         if(this.getToken()) return true;
                                 }
 
+                                // We also need to add the procedure to it's own scope for recursive calling
+                                // this.symbol_table[temp_scope][symbol.value] = new_symbol;
+                                this.symbol_table[temp_operation.value][temp_operation.value] = this.symbol_table["program"][temp_operation.value];
+
                                 // Set the current state
                                 this.state = this.States.Procedure.declaration;
                                 gathering = true;
@@ -692,6 +697,7 @@ class Parser {
                                 this.tokens.unshift(this.current);
                                 this.next = this.current;
                                 this.tokens.shift();
+                                this.procedure_table[temp_operation.value] = temp_operation; // Store a temp for now
                                 // Build the procedure
                                 while(gathering) {
                                         switch(this.state) {
@@ -706,6 +712,7 @@ class Parser {
                                                 if(this.getDeclaration(temp_operation.value)) return true;
                                                 if(this.operation.type == this.Operation.Types.procedure) {
                                                         temp_operation.operations.push(this.operation);
+                                                        this.procedure_table[temp_operation.value] = temp_operation; // Store a temp for now
                                                         this.operation = {
                                                                 "type"       : null,
                                                                 "value"      : null,
@@ -735,6 +742,7 @@ class Parser {
                                                         return true;
                                                 }
                                                 temp_operation.operations.push(this.operation);
+                                                this.procedure_table[temp_operation.value] = temp_operation; // Store a temp for now
                                                 this.operation = {
                                                         "type"       : null,
                                                         "value"      : null,
@@ -802,6 +810,40 @@ class Parser {
                 if(this.getToken()) return true;
 
                 switch(this.current.type) {
+
+                        //#region -> GOTO
+                        case "GOTO":
+                        if(this.current.value != "RETURN") {
+                                this.postError("Internal error.");
+                                return true;
+                        }
+
+                        if(this.state != this.States.Procedure.statement) {
+                                this.postError("Unexpected return statement from main program.");
+                                return true;
+                        }
+
+                        if(this.postExpression(scope)) return true;
+
+                        this.operation.type = this.Operation.Types.return;
+                        this.operation.expression = this.expression_result;
+
+                        if(this.current.value != ";") {
+                                this.postError("Expected end of line character.");
+                                return true;
+                        }
+
+                        let symbol = this.symbol_table[scope][scope];
+
+                        console.log("POINT 1");
+                        console.log(symbol);
+                        console.log(scope);
+                        console.log(this.symbol_table);
+                        return true;
+
+
+                        return false;
+                        //#endregion
 
                         //#region -> LOOP
                         case "LOOP":
@@ -1239,6 +1281,8 @@ class Parser {
                                                         return true;
                                                 }
                                         }
+
+                                        // Initial argument
                                         argument = {
                                                 "key"   : this.current.value,
                                                 "type"  : this.symbol_table[temp_scope][this.current.value].type,
@@ -1249,8 +1293,12 @@ class Parser {
                                         }
 
                                         // Check if there exists a procedure with that identifier
-                                        if(typeof this.procedure_table[this.current.value] == 'undefined' || this.procedure_table[this.current.value] == 'undefined' || this.procedure_table[this.current.value] == null) {
+                                        if(typeof this.procedure_table[this.current.value] == 'undefined' 
+                                        || this.procedure_table[this.current.value] == 'undefined' 
+                                        || this.procedure_table[this.current.value] == null) {
+                                                
                                                 let index = false;
+                                                // See if an index is being used
                                                 if(this.next.value == "[") {
                                                         if(this.getToken()) return true;
                                                         switch(this.next.type) {
@@ -1274,6 +1322,7 @@ class Parser {
                                                                 return true;
                                                         }
                                                 }
+
                                                 // Check if it is an assignment to ALL values within an array
                                                 if((argument.bound > 0) && !index) {
                                                         argument.index = -1;
@@ -1282,9 +1331,13 @@ class Parser {
                                                 break;
                                         }
                                         else {
+                                                // This section is for procedure calls
                                                 let procedure = this.procedure_table[this.current.value];
+                                                
+                                                // Update the argument
                                                 argument.value = "PROCEDURE";
 
+                                                // Yes, we need parenthesis
                                                 if(this.next.value != "(") {
                                                         this.postError("Procedure call requires parameter specification.");
                                                         return true;
@@ -1308,77 +1361,77 @@ class Parser {
                                                                         break;
                                                                 }
                                                                 if(this.getToken()) return true;
-                                                                temp_list.push(this.current);
+                                                                temp_list.unshift(this.current);
                                                                 break;
                                                                 case "(":
                                                                 count = count + 1;
                                                                 if(this.getToken()) return true;
-                                                                temp_list.push(this.current);
+                                                                temp_list.unshift(this.current);
                                                                 break;
                                                                 case ";":       
                                                                 this.postError("Unbalanced parenthesis on " + procedure.value + ".");
                                                                 return true;
                                                                 default:
                                                                 if(this.getToken()) return true;
-                                                                temp_list.push(this.current);
+                                                                temp_list.unshift(this.current);
                                                         }     
                                                 }
 
-
+                                                // If the procedure call requires parameters
                                                 if(temp_list.length == 0 && procedure.parameters.length != 0) {
                                                         this.postError("Arguments were expected within the procedure call.");
                                                         return true;
                                                 }
 
+                                                // If the list length is zero, lets just break
                                                 if(temp_list.length == 0) {
                                                         argument_list.push(argument);
                                                         break;
                                                 }
 
-                                                let temp_result = this.expression_result;
+                                                // Build an expression list for each parameter in the procedure
+                                                let temp_result = this.expression_result;       // Need to do this in case the procedure has anything 
                                                 this.expression_result = [];
                                                 if(this.postProcedure(scope, temp_list)) return true;
                                                 this.expression_result = temp_result;
+                                                argument.expressions = this.expressions;        // Assign the output from posrProcedure
+                                                this.next = this.current;                       // I did some goofy stuff with the tokens in that call
+                                                this.expressions = null;
 
-                                                argument.expressions = this.expressions;
-
-                                                // Check the lengths
+                                                // Check the lengths of parameters and expressions
                                                 if(argument.expressions.length != procedure.parameters.length) {
                                                         this.postError("Expected equal arguments as what was declared for the procedure.");
                                                         return true;
                                                 }
 
                                                 // Ok, now we need to check them types and bounds
-                                                let type = null;
+                                                let type_a = null;
+                                                let type_b = null;
+                                                let symbol = null;
+                                                let expression = null;
+                                                let index = -1;
                                                 for(let index in argument.expressions) {
+                                                        
+                                                        // Bounds check
+                                                        expression = argument.expressions[index];
+                                                        symbol = this.symbol_table[procedure.value][procedure.parameters[index].key]
+                                                        if(this.checkBounds(symbol, expression, index)) return true;
+                                                        
+                                                        // Type check
                                                         for(let item in argument.expressions[index]) {
-                                                                type = argument.expressions[index][item].type;
-                                                                if(type == "INTEGER" || type == "FLOAT" || type =="BOOL") {
-                                                                        if(!(procedure.parameters[index].type == "INTEGER" || procedure.parameters[index].type == "FLOAT" 
-                                                                        || procedure.parameters[index].type == "BOOL")) {
-                                                                                this.postError("Cannot pass type " + type + " to function " + procedure.value + ".");
-                                                                                return true;
-                                                                        }
+                                                                type_a = procedure.parameters[index].type;
+                                                                type_b = argument.expressions[index][item].type;
+                                                                
+                                                                // Type check
+                                                                if(type_b == "INTEGER" || type_b == "FLOAT" || type_b == "BOOL" || type_b == "STRING") {
+                                                                        if(this.typeCheck(type_a,type_b)) return true;        
                                                                 }
-                                                                else if(type == "STRING" && procedure.parameters[index].type != "STRING") {
-                                                                        this.postError("Cannot pass type " + type + " to function " + procedure.value + ".");
-                                                                        return true;
-                                                                }
-
-                                                                if(argument.expressions[index][item].value == "IDEN") {
-                                                                        if(argument.expressions[index][item].index == -1) {
-                                                                                if(this.symbol_table[procedure.value][procedure.parameters[index].key].bound != argument.expressions[index][item].index) {
-                                                                                        this.postError("Array assignments must be within bounds.");
-                                                                                        return true;
-                                                                                } 
-                                                                        }
-                                                                }
+                                                                
                                                         }
                                                 }
 
+                                                // If we pass all of that
                                                 argument_list.push(argument);
-                                                this.next = this.current;
-                                                this.expressions = null;
                                                 break;
                                         }
                                 }
@@ -1755,11 +1808,7 @@ class Parser {
                                 }
 
                                 // Type check
-                                if(!(x.type == "INTEGER" || x.type == "BOOL" || x.type == "FLOAT") 
-                                || !(y.type == "INTEGER" || y.type == "BOOL" || y.type == "FLOAT")) {
-                                        this.postError("Invalid variable type on operation " + temp.value + ".");
-                                        return true;
-                                }
+                                if(this.typeCheck(x.type,y.type)) return true;
                                 if(first) first = false;
                                 this.expression_result.push(temp);
                                 this.expression_result.push(y);
@@ -1832,11 +1881,7 @@ class Parser {
                                 }
 
                                 // Type check
-                                if(!(x.type == "INTEGER" || x.type == "BOOL" || x.type == "FLOAT") 
-                                || !(y.type == "INTEGER" || y.type == "BOOL" || y.type == "FLOAT")) {
-                                        this.postError("Invalid variable type on operation " + temp.value + ".");
-                                        return true;
-                                }
+                                if(this.typeCheck(x.type,y.type)) return true;
                                 if(first) first = false;
                                 this.expression_result.unshift(temp);
                                 this.expression_result.unshift(y);
