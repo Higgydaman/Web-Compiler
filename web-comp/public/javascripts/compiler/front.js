@@ -512,6 +512,7 @@ class Parser {
                 this.symbol_table = new Object();
                 this.enum_count = 0;
                 this.procedure_table = new Object();
+                this.call_number = 0;
                 //#endregion                
         
                 this.updateBuiltin();
@@ -632,6 +633,12 @@ class Parser {
 
                         }
                         else if(this.current.value == "PROCEDURE") {
+
+                                if(this.state == States.Procedure.declaration) {
+                                        this.postError("Cannot embedd procedures. Sorry.");
+                                        return true;
+                                }
+
                                 if(this.next.type != "IDEN") {
                                         this.postError("Unable to parse procedure without a name.");
                                         return true;
@@ -643,7 +650,8 @@ class Parser {
                                         "value"      : this.next.value,
                                         "parameters" : [],
                                         "expression" : [],
-                                        "operations" : [] 
+                                        "operations" : [],
+                                        "used"       : false 
                                 }
 
                                 let temp_state = null;
@@ -796,6 +804,9 @@ class Parser {
 
                                 // Just in case this has switched
                                 this.state = temp_state;
+                                this.symbol_table[temp_operation.value][temp_operation.value] = this.symbol_table[temp_scope][temp_operation.value];
+
+
                                 return false;
                         }
                         else {
@@ -1393,8 +1404,10 @@ class Parser {
                                         }
                                         else {
                                                 // This section is for procedure calls
+                                                this.procedure_table[this.current.value].used = true;
                                                 let procedure = this.procedure_table[this.current.value];
                                                 
+
                                                 // Update the argument
                                                 argument.value = "PROCEDURE";
 
@@ -1861,151 +1874,166 @@ class Parser {
                 if(temp_array.length == 0) return false;
                 argument_list = temp_array;
 
-                if(this.expression_result.length == 0) {
-                        this.expression_result[0] = argument_list.shift();
-                }
+                // if(this.expression_result.length == 0) {
+                //         this.expression_result[0] = argument_list.shift();
+                // }
 
-                // Do the factors
-                temp_array = [];
-                var x = null;
-                var y = null;
-                var temp = null;
-                let first = true;
-                while(1) {
-                        // Grab the next value
+                // For the rest of the time, just push that shit on the stack
+                let length = argument_list.length
+                for(var i = 1; i < length; i++) {
                         temp = argument_list.shift();
-                        
-                        // Check if it is time to quit
-                        if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
-                        
-                        // See if we have found a FACTOR
-                        if(temp.type == "FACTOR") {
-                                // Grab a new x value
-                                if(!first) {
-                                        x = this.expression_result[0];
-                                }
-                                else {
-                                        x = this.expression_result[this.expression_result.length - 1];
-                                }
-
-
-                                y = argument_list.shift();
-                                if(y.type == "STRING" || x.type == "STRING") {
-                                        this.postError("String is unsupported with arithmatic operations.");
-                                        return true 
-                                }
-                                if(x == "undefined" || typeof x === 'undefined' || x == null) {
-                                        this.postError("Unbalanced expression statement.");
-                                        return true;
-                                }
-                                //Grab a new y value
-                                if(y == "undefined" || typeof y === 'undefined' || y == null) {
-                                        this.postError("Unbalanced expression statement.");
-                                        return true;
-                                }
-
-                                // Check if it is two array AROP
-                                if(x.value == "IDEN" && y.value == "IDEN") {
-                                        if(x.index == -1 && y.index == -1) {
-                                                if(x.bound != y.bound) {
-                                                        this.postError("Cannot assignment array size " + x.bound + " to array size " + y_bound + ".");
-                                                        return true;
-                                                }
-                                        }
-                                }
-
-                                // Check if either are undefined
-                                if((x == "undefined" || typeof x == 'undefined' || x == null) || 
-                                (y == "undefined" || typeof y == 'undefined' || y == null)) {
-                                        this.postError("Invalid variable type on operation " + temp.value + ".");
-                                        return true;
-                                }
-
-                                // Type check
-                                if(this.typeCheck(x.type,y.type)) return true;
-                                if(first) first = false;
-                                this.expression_result.push(temp);
-                                this.expression_result.push(y);
-                        }
-                        else {
-                                // Else push the temp
-                                temp_array.push(temp);
-                        }
+                        this.expression_result.unshift(temp);
                 }
 
-                // Before arithmatic and factors, ensure the array is warm enough for them
-                if(temp_array.length == 0) return false;
-                argument_list = temp_array;
+                
 
-                if(this.expression_result.length == 0) {
-                        this.expression_result[0] = argument_list.shift();
-                }
 
-                // Do the last arithmatic operators
-                argument_list = temp_array;
-                temp_array = [];
-                var x = null;
-                var y = null;
-                var temp = null;
-                first = true;
-                while(1) {
-                        // Grab the next value
-                        temp = argument_list.shift();
-
-                        // Check if it is time to quit
-                        if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
+                // // Do the factors
+                // temp_array = [];
+                // var x = null;
+                // var y = null;
+                // var temp = null;
+                // let first = true;
+                // while(1) {
+                //         // Grab the next value
+                //         temp = argument_list.shift();
                         
-                        // See if we have found a FACTOR
-                        if(temp.type == "AROP") {
-                                // Grab a new x value
-                                if(!first) {
-                                        x = this.expression_result[0];
-                                }
-                                else {
-                                        x = this.expression_result[this.expression_result.length - 1];
-                                }
+                //         // Check if it is time to quit
+                //         if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
+                        
+                //         // See if we have found a FACTOR
+                //         if(temp.type == "FACTOR") {
+                //                 // Grab a new x value
+                //                 // if(!first) {
+                //                 //         x = this.expression_result[0];
+                //                 // }
+                //                 // else {
+                //                 //         x = this.expression_result[this.expression_result.length - 1];
+                //                 // }
 
-                                y = argument_list.shift();
+                //                 x = this.expression_result[this.expression_result.length - 1];
 
-                                if(x == "undefined" || typeof x === 'undefined' || x == null) {
-                                        this.postError("Unbalanced expression statement.");
-                                        return true;
-                                }
-                                //Grab a new y value
-                                if(y == "undefined" || typeof y === 'undefined' || y == null) {
-                                        this.postError("Unbalanced expression statement.");
-                                        return true;
-                                }
 
-                                // Check if it is two array AROP
-                                if(x.value == "IDEN" && y.value == "IDEN") {
-                                        if(x.index == -1 && y.index == -1) {
-                                                if(x.bound != y.bound) {
-                                                        this.postError("Cannot assignment array size " + x.bound + " to array size " + y_bound + ".");
-                                                        return true;
-                                                }
-                                        }
-                                }
+                //                 if(x == "undefined" || typeof x === 'undefined' || x == null) {
+                //                         this.postError("Unbalanced expression statement.");
+                //                         return true;
+                //                 }
+                //                 y = argument_list.shift();
+                //                 //Grab a new y value
+                //                 if(y == "undefined" || typeof y === 'undefined' || y == null) {
+                //                         this.postError("Unbalanced expression statement.");
+                //                         return true;
+                //                 }
+                //                 if(y.type == "STRING" || x.type == "STRING") {
+                //                         this.postError("String is unsupported with arithmatic operations.");
+                //                         return true 
+                //                 }
 
-                                // Check if either are undefined
-                                if((x == "undefined" || typeof x == 'undefined' || x == null) || 
-                                (y == "undefined" || typeof y == 'undefined' || y == null)) {
-                                        this.postError("Invalid variable type on operation " + temp.value + ".");
-                                        return true;
-                                }
+                //                 // Check if it is two array AROP
+                //                 if(x.value == "IDEN" && y.value == "IDEN") {
+                //                         if(x.index == -1 && y.index == -1) {
+                //                                 if(x.bound != y.bound) {
+                //                                         this.postError("Cannot assignment array size " + x.bound + " to array size " + y_bound + ".");
+                //                                         return true;
+                //                                 }
+                //                         }
+                //                 }
 
-                                // Type check
-                                if(this.typeCheck(x.type,y.type)) return true;
-                                if(first) first = false;
-                                this.expression_result.unshift(temp);
-                                this.expression_result.unshift(y);
+                //                 // Check if either are undefined
+                //                 if((x == "undefined" || typeof x == 'undefined' || x == null) || 
+                //                 (y == "undefined" || typeof y == 'undefined' || y == null)) {
+                //                         this.postError("Invalid variable type on operation " + temp.value + ".");
+                //                         return true;
+                //                 }
+
+                //                 // Type check
+                //                 if(this.typeCheck(x.type,y.type)) return true;
+                //                 if(first) first = false;
+                //                 this.expression_result.push(temp);
+                //                 this.expression_result.push(y);
+                //         }
+                //         else {
+                //                 // Else push the temp
+                //                 temp_array.push(temp);
+                //         }
+                // }
+
+                // // Before arithmatic and factors, ensure the array is warm enough for them
+                // if(temp_array.length == 0) return false;
+                // argument_list = temp_array;
+
+                // if(this.expression_result.length == 0) {
+                //         this.expression_result[0] = argument_list.shift();
+                // }
+
+                // // Do the last arithmatic operators
+                // argument_list = temp_array;
+                // temp_array = [];
+                // var x = null;
+                // var y = null;
+                // var temp = null;
+                // first = true;
+                // while(1) {
+                //         // Grab the next value
+                //         temp = argument_list.shift();
+
+                //         // Check if it is time to quit
+                //         if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
+                        
+                //         // See if we have found a FACTOR
+                //         if(temp.type == "AROP") {
+                //                 // Grab a new x value
+                //                 // Grab a new x value
+                //                 // if(!first) {
+                //                 //         x = this.expression_result[0];
+                //                 // }
+                //                 // else {
+                //                 //         x = this.expression_result[this.expression_result.length - 1];
+                //                 // }
+
+                //                 x = this.expression_result[this.expression_result.length - 1];
+
+                //                 y = argument_list.shift();
+
+                //                 if(x == "undefined" || typeof x === 'undefined' || x == null) {
+                //                         this.postError("Unbalanced expression statement.");
+                //                         return true;
+                //                 }
+                //                 //Grab a new y value
+                //                 if(y == "undefined" || typeof y === 'undefined' || y == null) {
+                //                         this.postError("Unbalanced expression statement.");
+                //                         return true;
+                //                 }
+
+                //                 // Check if it is two array AROP
+                //                 if(x.value == "IDEN" && y.value == "IDEN") {
+                //                         if(x.index == -1 && y.index == -1) {
+                //                                 if(x.bound != y.bound) {
+                //                                         this.postError("Cannot assignment array size " + x.bound + " to array size " + y_bound + ".");
+                //                                         return true;
+                //                                 }
+                //                         }
+                //                 }
+
+                //                 // Check if either are undefined
+                //                 if((x == "undefined" || typeof x == 'undefined' || x == null) || 
+                //                 (y == "undefined" || typeof y == 'undefined' || y == null)) {
+                //                         this.postError("Invalid variable type on operation " + temp.value + ".");
+                //                         return true;
+                //                 }
+
+                //                 // Type check
+                //                 if(this.typeCheck(x.type,y.type)) return true;
+                //                 if(first) first = false;
+                //                 this.expression_result.unshift(temp);
+                //                 this.expression_result.unshift(y);
                                 
-                        }
-                        else {
-                                // Else push the temp
-                                this.expression_result.unshift(temp);
-                        }
-                }
+                //         }
+                //         else {
+                //                 // Else push the temp
+                //                 this.expression_result.unshift(temp);
+                //         }
+                // }
 
                 // Make the next call if it is needed
                 if(argument_list.length != 0) {
@@ -2492,6 +2520,7 @@ class Parser {
         //#endregion       
         
 }
+
 class Code {
         constructor(program, symbols, procedures) {
                 this.flag = false;
@@ -2500,16 +2529,440 @@ class Code {
                         this.flag = true;
                         this.code.push("Errors Exist");
                 }
+                this.tab_count = 1;
+                this.tab = "    ";
+                this.program = program;
+                this.symbols = symbols;
+                this.procedures = procedures;
+                this.label_count = 0;
+                this.table = new Object();
         }
 
         generateCode() {
-                if(this.flag) return true;
+                if(messanger.flag) return true;
+                // Write the headers required
+                this.writeHeaders();
 
-                // Write the beggining stuff that is needed, like fileio and what not
+                // Find and print the MAX global
+                this.writeGlobals();
 
+                // Open up main
+                this.writeMain();
 
+                // Write the begining stuff that is needed, like fileio and what not
+                this.writeFileio();
+
+                // Write the program operations out
+                this.writeOperations(this.program.operations);
+
+                // Close Fileio
+                this.closeFileio();
+
+                // Close main and return 0
+                this.closeMain();
 
                 return false;
+        }
+
+        writeOperations(operations) {
+                for(let index in operations) {
+                        let operation = operations[index]
+                        switch(operation.type) {
+                                case Operation.Types.assignment:
+                                console.log("Caught assignment.");
+                                console.log(operation);
+                                // Do the expression analysis
+                                this.writeExpression(operation.expression);
+
+                                // STORE R0 to the correct location
+                                break;
+                        }
+                }
+        }
+
+        writeExpression(expression) {
+
+                if(expression.length > 2) {
+                        let operation   = null;
+                        let index       = expression.length - 1;
+                        let r0          = false;
+                        while(1) {
+                                if(index < 0) break;
+                                if(!r0) {
+                                        // We have to take in the first argument as r1
+                                        // Store R1
+                                        console.log("STORING IN R1: " + expression[index].value);
+                                        index = index - 1;
+                                        // Store the operator
+                                        operation = expression[index].value;
+                                        console.log("SAVING IN OPERATOR: " + operation);
+                                        index = index - 1;
+                                        // Store next value in R2
+                                        console.log("STORING IN R2: " + expression[index].value);
+                                        index = index - 1;
+                                        // Compute and store in R0
+                                        console.log("COMPUTE. ");
+                                        console.log("STORE RESULT INTO R0.");
+                                        r0 = true;
+                                }
+                                else {
+                                        // LOAD R1 with result
+                                        console.log("LOADING IN R1: " + "R0");
+
+                                        // Store the operator
+                                        operation = expression[index].value;
+                                        console.log("SAVING IN OPERATOR: " + operation);
+                                        index = index - 1;
+
+                                        // Store next value in R2
+                                        console.log("STORING IN R2: " + expression[index].value);
+                                        index = index - 1;
+                                        
+                                        // Compute and store in R0
+                                        console.log("COMPUTE. ");
+                                        console.log("STORE RESULT INTO R0.");
+                                        r0 = true;
+                                }
+                        }
+                }
+        }
+
+        defineMemory() {
+
+                // Do global memory
+                let integer = 0;
+                let float = 0;
+                let string = 0;
+                let name = "";
+
+                this.table['global'] = new Object();
+
+                for(let index in this.symbols['global']) {
+                        let scope = this.symbols['global'];
+                        if(scope[index].type == "INTEGER" || scope[index].type == "BOOL") {
+                                // Assign a memory location
+                                if(scope[index].bound > 0) {
+                                        for(var i = 0; i < scope[index].bound; i = i + 1) {
+                                                name = index + i;                  
+                                                this.table['global'][name] = {
+                                                        'key'   : index,
+                                                        'loc'   : integer
+                                                }
+                                                integer = integer + 1;
+                                        }
+                                }
+                                else {
+                                        name = index + 0;                  
+                                        this.table['global'][name] = {
+                                                'key'   : index,
+                                                'loc'   : integer
+                                        }
+                                        integer = integer + 1;
+                                }                                
+                        }
+                        if(scope[index].type == "FLOAT") {
+                                // Assign a memory location
+                                if(scope[index].bound > 0) {
+                                        for(var i = 0; i < scope[index].bound; i = i + 1) {
+                                                name = index + i;                  
+                                                this.table['global'][name] = {
+                                                        'key'   : index,
+                                                        'loc'   : float
+                                                }
+                                                float = float + 1;
+                                        }
+                                }
+                                else {
+                                        name = index + 0;                  
+                                        this.table['global'][name] = {
+                                                'key'   : index,
+                                                'loc'   : float
+                                        }
+                                        float = float + 1;
+                                }                                
+                        }
+                        if(scope[index].type == "STRING") {
+                                // Assign a memory location
+                                if(scope[index].bound > 0) {
+                                        for(var i = 0; i < scope[index].bound; i = i + 1) {
+                                                name = index + i;                  
+                                                this.table['global'][name] = {
+                                                        'key'   : index,
+                                                        'loc'   : string
+                                                }
+                                                string = string + 1;
+                                        }
+                                }
+                                else {
+                                        name = index + 0;                  
+                                        this.table['global'][name] = {
+                                                'key'   : index,
+                                                'loc'   : string
+                                        }
+                                        string = string + 1;
+                                }                                
+                        }
+
+                        // Assign a memory location
+
+
+                }
+
+                if(integer != 0) this.code.push('int ' + 'G' + 'I' + 'M' + '[' + integer + '] = {0};');
+                if(float != 0) this.code.push('float ' + 'G' + 'F' + 'M' + '[' + float + '] = {0};');
+                if(string != 0) this.code.push('char* ' + 'G' + 'S' + 'M' + '[' + string + ']= {0};');
+
+                // Do program memory
+                integer = 0;
+                float = 0;
+                string = 0;
+
+                this.table['program'] = new Object();
+
+                for(let index in this.symbols['program']) {
+                        let scope = this.symbols['program'];
+                        if(scope[index].type == "INTEGER" || scope[index].type == "BOOL") {
+                                // Assign a memory location
+                                if(scope[index].bound > 0) {
+                                        for(var i = 0; i < scope[index].bound; i = i + 1) {
+                                                name = index + i;                  
+                                                this.table['program'][name] = {
+                                                        'key'   : index,
+                                                        'loc'   : integer
+                                                }
+                                                integer = integer + 1;
+                                        }
+                                }
+                                else {
+                                        name = index + 0;                  
+                                        this.table['program'][name] = {
+                                                'key'   : index,
+                                                'loc'   : integer
+                                        }
+                                        integer = integer + 1;
+                                }                                
+                        }
+                        if(scope[index].type == "FLOAT") {
+                                // Assign a memory location
+                                if(scope[index].bound > 0) {
+                                        for(var i = 0; i < scope[index].bound; i = i + 1) {
+                                                name = index + i;                  
+                                                this.table['program'][name] = {
+                                                        'key'   : index,
+                                                        'loc'   : float
+                                                }
+                                                float = float + 1;
+                                        }
+                                }
+                                else {
+                                        name = index + 0;                  
+                                        this.table['program'][name] = {
+                                                'key'   : index,
+                                                'loc'   : float
+                                        }
+                                        float = float + 1;
+                                }                                
+                        }
+                        if(scope[index].type == "STRING") {
+                                // Assign a memory location
+                                if(scope[index].bound > 0) {
+                                        for(var i = 0; i < scope[index].bound; i = i + 1) {
+                                                name = index + i;                  
+                                                this.table['program'][name] = {
+                                                        'key'   : index,
+                                                        'loc'   : string
+                                                }
+                                                string = string + 1;
+                                        }
+                                }
+                                else {
+                                        name = index + 0;                  
+                                        this.table['program'][name] = {
+                                                'key'   : index,
+                                                'loc'   : string
+                                        }
+                                        string = string + 1;
+                                }                                
+                        }
+                        
+                }
+
+                if(integer != 0) this.code.push('int ' + 'P' + 'I' + 'M' + '[' + integer + '] = {0};');
+                if(float != 0) this.code.push('float ' + 'P' + 'F' + 'M' + '[' + float + '] = {0};');
+                if(string != 0) this.code.push('char* ' + 'P' + 'S' + 'M' + '[' + string + ']= {0};');
+
+                // Do Sub routine memory
+                integer = 0;
+                float = 0;
+                string = 0;
+                let temp_integer = 0;
+                let temp_float = 0;
+                let temp_string = 0;
+
+                for(let index in this.symbols) {
+                        if(!(typeof this.procedures[index] == 'undefined' || this.procedures[index] == null)) {
+                                if(this.procedures[index].used) {
+                                        // Assign a label
+                                        this.label_count = this.label_count + 1;
+                                        this.procedures[index]["label"] = 'L' + this.label_count;
+                                        this.procedures[index]["printed"] = false; // For later on
+
+                                        // Reset the counts
+                                        integer = 0;
+                                        float = 0;
+                                        string = 0;
+                                        
+                                        // Create a new scope in the table
+                                        this.table[index] = new Object();
+
+                                        // Count the types
+                                        for(let symbol in this.symbols[index]) {
+
+                                                let item = this.symbols[index][symbol];
+                                                
+                                                if(item.type == "INTEGER" || item.type == "BOOL") {
+                                                        // Assign a memory location
+                                                        if(item.bound > 0) {
+                                                                for(var i = 0; i < item.bound; i = i + 1) {
+                                                                        name = symbol + i;                  
+                                                                        this.table[index][name] = {
+                                                                                'key'   : index,
+                                                                                'loc'   : integer
+                                                                        }
+                                                                        integer = integer + 1;
+                                                                }
+                                                        }
+                                                        else {
+                                                                name = symbol + 0;                  
+                                                                this.table[index][name] = {
+                                                                        'key'   : index,
+                                                                        'loc'   : integer
+                                                                }
+                                                                integer = integer + 1;
+                                                        }                                
+                                                }
+                                                if(item.type == "FLOAT") {
+                                                        // Assign a memory location
+                                                        if(item.bound > 0) {
+                                                                for(var i = 0; i < item.bound; i = i + 1) {
+                                                                        name = symbol + i;                  
+                                                                        this.table[index][name] = {
+                                                                                'key'   : index,
+                                                                                'loc'   : float
+                                                                        }
+                                                                        float = float + 1;
+                                                                }
+                                                        }
+                                                        else {
+                                                                name = symbol + 0;                  
+                                                                this.table[index][name] = {
+                                                                        'key'   : index,
+                                                                        'loc'   : float
+                                                                }
+                                                                float = float + 1;
+                                                        }                                
+                                                }
+                                                if(item.type == "STRING") {
+                                                        // Assign a memory location
+                                                        if(item.bound > 0) {
+                                                                for(var i = 0; i < item.bound; i = i + 1) {
+                                                                        name = symbol + i;                  
+                                                                        this.table[index][name] = {
+                                                                                'key'   : index,
+                                                                                'loc'   : string
+                                                                        }
+                                                                        string = string + 1;
+                                                                }
+                                                        }
+                                                        else {
+                                                                name = symbol + 0;                  
+                                                                this.table[index][name] = {
+                                                                        'key'   : index,
+                                                                        'loc'   : string
+                                                                }
+                                                                string = string + 1;
+                                                        }                                
+                                                }
+                                        }
+
+                                        // Do some logic
+                                        if(integer > temp_integer) temp_integer = integer;
+                                        if(float > temp_float) temp_float = float;
+                                        if(string> temp_string) temp_string = string;
+                                }
+                        }
+                }
+
+                if(temp_integer != 0) this.code.push('int ' + 'S' + 'I' + 'M' + '[' + temp_integer + '] = {0};');
+                if(temp_float != 0) this.code.push('float ' + 'S' + 'F' + 'M' + '[' + temp_float + '] = {0};');
+                if(temp_string != 0) this.code.push('char* ' + 'S' + 'S' + 'M' + '[' + temp_string + ']= {0};');
+
+        }
+
+        defineProcedures(scope) {
+                // console.log(scope);
+                for(let index in scope) {
+                        if(!(typeof this.procedures[index] == 'undefined' || this.procedures[index] == null)) {
+                                if(this.procedures[index].used && this.procedures[index]["printed"] == false) {
+                                        this.writeProcedure(this.procedures[index]);
+                                        this.procedures[index]["printed"] = true;
+                                }
+                        }
+                }
+        }
+
+        writeProcedure(procedure) {
+                
+                // Print the label
+                this.code.push(procedure.label + ':');
+
+                // Print/reset memory
+
+
+
+        }
+
+        writeGlobals() {
+                var max = 1;
+                for(let index in this.symbols) {
+                        if(Object.keys(this.symbols[index]).length > max) {
+                                max = Object.keys(this.symbols[index]).length;
+                        }
+                }
+                this.code.push('int *R' +'[' + max + ']' + ';');
+                this.max = max;
+
+                // Define the call stack
+                this.code.push('int CS' +'[' + '10000' + ']' + ';');
+
+                // Define global memory
+                this.defineMemory();
+        }
+
+        closeFileio() {
+                this.code.push(this.tab + 'fclose(out);');
+        }
+
+        writeFileio() {
+                this.code.push(this.tab + "FILE *out;");
+                this.code.push(this.tab + 'out = fopen("output.txt", "w+");');
+        }
+
+        closeMain() {
+                this.code.push(this.tab + 'return 0;');
+                for(let scope in this.symbols) {
+                        this.defineProcedures(this.symbols[scope]);
+                }
+                this.code.push("}");
+        }
+
+        writeMain() {
+                this.code.push("int main() {");
+        }
+
+        writeHeaders() {
+                this.code.push("#include <stdio.h>");
+                this.code.push("#include <stdlib.h>");
         }
 }
 
@@ -2634,9 +3087,12 @@ function main(data) {
         //#endregion
 
         //#region -> STEP 4: Generate code
-        var generator = new Code(parser.program, parser.symbol_table, parser.procedure_table);
-        generator.generateCode();                       // Generate the code
-        messanger.program.code = generator.code;
+        if(messanger.flag == false) {
+                var generator = new Code(parser.program, parser.symbol_table, parser.procedure_table);
+                generator.generateCode();                       // Generate the code
+                messanger.program.code = generator.code;
+                // console.log(generator.table);
+        }
         //#endregion
 
         //#region -> STEP 5: Make call to server for output
