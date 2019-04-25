@@ -1,0 +1,29 @@
+# Getting Git
+sudo apt install git-all
+
+# Downloading Node.js
+sudo apt update
+sudo apt install nodejs npm
+sudo apt install npm
+# Verifiy installation
+npm --version
+
+# Great, now grab the code
+git clone https://github.com/Higgydaman/Web-Compiler.git
+
+# Shweet, now we just have to spin it up
+cd Web-Compiler
+cd web-comp
+npm install
+npm start
+
+# At this point you should see a server running on your computer
+# Open a FireFox or Chrome browser, dont fight me on this
+# Put localhost:3000 ito the URL and BOOM! an IDE just for you. Go fullscreen with f11.
+
+# Most code ... or at least everything you are concerned with is in front.js
+# IF you want to view any of the code, just hit f12 and then the developer tools will pop up.
+
+
+
+
