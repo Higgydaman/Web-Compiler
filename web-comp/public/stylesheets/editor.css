@@ -2,9 +2,9 @@
 
 html,body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
 
-#editor { height: 100%; width: 50%; display: inline-block; }
+#editor { height: 100%; width: 50%; display: inline-block; bottom: 0%;}
 
-#result { height: 100%; width: 50%; display: inline-block; }
+#result { height: 100%; width: 50%; display: inline-block; bottom: 0%;}
 
 /* #iframe { height: 100%; width: 50%; display: inline-block; } */
 

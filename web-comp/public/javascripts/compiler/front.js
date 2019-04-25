@@ -421,9 +421,18 @@ class Scanner {
                                 this.type = "STRG";
                                 this.value = this.string;        
                         }
-                        else {
+                        else if(this.current == " " || this.current == "\t" || this.current == "\b" || this.current == "\f" || this.current == "\n" || this.current == "\r" 
+                                || this.current == "\v" || this.current == "\0" || this.current == "\b"){
                                 if(this.incrimentIndex("SCANNER")) return true;
                                 return this.getLexeme(); 
+                        }
+                        else {
+                                messanger.flag = true;
+                                messanger.message = "Invalid character " + this.current;
+                                messanger.line = this.line_number;
+                                messanger.putError();
+                                if(this.incrimentIndex("SCANNER")) return true;
+                                return this.getLexeme();
                         }
                 }
 
@@ -476,6 +485,8 @@ class Parser {
                 this.enum_count = 0;
                 this.procedure_table = new Object();
                 //#endregion                
+        
+                this.updateBuiltin();
         }
 
         //#region -> Public calls that will be made
@@ -544,7 +555,7 @@ class Parser {
                         break;
                         case this.States.declaration:
                         if(this.getDeclaration(scope)) return true;// P&D TODO ERROR RECOVERY
-                        if(this.state == this.States.statement) return this.getOperation(scope);
+                        if(this.state == this.States.statement)  return this.getOperation(scope);
                         if(this.operation.type == this.Operation.Types.procedure) return false; // Go store that
                         break;
                         case this.States.statement:
@@ -687,8 +698,18 @@ class Parser {
 
                                 // We also need to add the procedure to it's own scope for recursive calling
                                 // this.symbol_table[temp_scope][symbol.value] = new_symbol;
-                                this.symbol_table[temp_operation.value][temp_operation.value] = this.symbol_table["program"][temp_operation.value];
 
+                                // Ensure we now have a new scope 
+                                if(typeof this.symbol_table[temp_operation.value] == 'undefined' || this.symbol_table[temp_operation.value] == null ) {
+                                        this.symbol_table[[temp_operation.value]] = {
+                                                [temp_operation.value] : this.symbol_table["program"][temp_operation.value]
+                                        }
+                                }
+                                else {
+                                        this.symbol_table[temp_operation.value][temp_operation.value] = this.symbol_table["program"][temp_operation.value];
+                                }
+                                
+                        
                                 // Set the current state
                                 this.state = this.States.Procedure.declaration;
                                 gathering = true;
@@ -834,13 +855,23 @@ class Parser {
                         }
 
                         let symbol = this.symbol_table[scope][scope];
+                
+                        // Check the return type on the procedure & the bound
+                        let type_a = symbol.type;
+                        let type_b = null;
+                        let temp_index = -1;
+                        for(let index in this.operation.expression) {
+                                type_b = this.operation.expression[index].type
+                                if(type_b == "BOOL" || type_b == "INTREGER" || type_b == "FLOAT" || type_b == "STRING") {
+                                        if(this.typeCheck(type_a,type_b)) return true;
+                                }
+                                if(this.operation.expression[index].value == "PROCEDURE") {
+                                        if(this.checkBounds(symbol, this.operation.expression[index].expressions, temp_index)) return true;
+                                }
+                        }
 
-                        console.log("POINT 1");
-                        console.log(symbol);
-                        console.log(scope);
-                        console.log(this.symbol_table);
-                        return true;
-
+                        // Bound check the whole thing
+                        if(this.checkBounds(symbol, this.operation.expression, temp_index)) return true;
 
                         return false;
                         //#endregion
@@ -1189,6 +1220,7 @@ class Parser {
                         "expressions" : []
                 }
                 let argument_list = [];         // Token list generated for the expression
+                let negative = false;
 
                 // Gether all the applicable tokens first
                 while(gathering) {
@@ -1229,12 +1261,39 @@ class Parser {
                                         argument_list.push(argument);
                                         break;
                                         case "-":
-                                        argument = {
-                                                "type"  : "AROP",
-                                                "value" : "-"
+                                        // We gotta handle negative number man
+                                        if((argument_list.length == 0)) {
+                                                if(this.next.type == "INTEGER" || this.next.type == "FLOAT") {
+                                                        negative = true;
+                                                        break;
+                                                }
+                                                else {
+                                                        this.postError("Unexpected negative sign within assignment.");
+                                                        return true;
+                                                }
                                         }
-                                        argument_list.push(argument);
-                                        break;
+                                        else if(this.next.type == "INTEGER" || this.next.type == "FLOAT") {
+                                                if(argument_list[0].type == "FLOAT" || argument_list[0].type == "INTEGER") {
+                                                        argument = {
+                                                                "type"  : "AROP",
+                                                                "value" : "-"
+                                                        }
+                                                        argument_list.push(argument);
+                                                        break;
+                                                }
+                                                else {
+                                                        negative = true;
+                                                        break;
+                                                }
+                                        }
+                                        else {
+                                                argument = {
+                                                        "type"  : "AROP",
+                                                        "value" : "-"
+                                                }
+                                                argument_list.push(argument);
+                                                break;
+                                        }
                                         case "*":
                                         argument = {
                                                 "type"  : "FACTOR",
@@ -1454,9 +1513,18 @@ class Parser {
                                 
                                 //#region -> INTEGER
                                 case "INTEGER":
-                                argument = {
-                                        "type"  : "INTEGER",
-                                        "value" : this.current.value
+                                if(negative) {
+                                        argument = {
+                                                "type"  : "INTEGER",
+                                                "value" : this.current.value * -1
+                                        } 
+                                        negative = false;
+                                }
+                                else {
+                                        argument = {
+                                                "type"  : "INTEGER",
+                                                "value" : this.current.value
+                                        }
                                 }
                                 argument_list.push(argument);
                                 break;
@@ -1464,9 +1532,18 @@ class Parser {
 
                                 //#region -> FLOAT
                                 case "FLOAT":
-                                argument = {
-                                        "type"  : "FLOAT",
-                                        "value" : this.current.value
+                                if(negative) {
+                                        argument = {
+                                                "type"  : "FLOAT",
+                                                "value" : this.current.value * -1
+                                        } 
+                                        negative = false;
+                                }
+                                else {
+                                        argument = {
+                                                "type"  : "FLOAT",
+                                                "value" : this.current.value
+                                        }
                                 }
                                 argument_list.push(argument);
                                 break;
@@ -1479,9 +1556,35 @@ class Parser {
                                         this.postError("Unexpected equals sign within expression.");
                                         return true;
                                 }
-                                argument = {
-                                        "type"  : this.current.type,
-                                        "value" : this.current.value
+                                if(this.current.value == "<") {
+                                        argument = {
+                                                "type"  : this.current.type,
+                                                "value" : ">"
+                                        }
+                                }
+                                else if(this.current.value == ">") {
+                                        argument = {
+                                                "type"  : this.current.type,
+                                                "value" : "<"
+                                        }
+                                }
+                                else if(this.current.value == "<=") {
+                                        argument = {
+                                                "type"  : this.current.type,
+                                                "value" : ">="
+                                        }
+                                }
+                                else if(this.current.value == ">=") {
+                                        argument = {
+                                                "type"  : this.current.type,
+                                                "value" : "<="
+                                        }
+                                }
+                                else {
+                                        argument = {
+                                                "type"  : this.current.type,
+                                                "value" : this.current.value
+                                        }
                                 }
                                 argument_list.push(argument);
                                 break;
@@ -1489,8 +1592,13 @@ class Parser {
 
                                 //#region -> DEFAULT
                                 default:
-                                // End of expression gathering
-                                gathering = false;
+                                if(this.current.value == ";" || this.current.value == "THEN") {
+                                        gathering = false;        
+                                }
+                                else {
+                                        this.postError("Unexpected input within assignment expression.");
+                                        return true;
+                                }
                                 //#endregion -> DEFAULT
                         }
                         if(gathering == false) break;
@@ -1780,6 +1888,10 @@ class Parser {
 
 
                                 y = argument_list.shift();
+                                if(y.type == "STRING" || x.type == "STRING") {
+                                        this.postError("String is unsupported with arithmatic operations.");
+                                        return true 
+                                }
                                 if(x == "undefined" || typeof x === 'undefined' || x == null) {
                                         this.postError("Unbalanced expression statement.");
                                         return true;
@@ -1900,10 +2012,16 @@ class Parser {
                 return false;
         }
         postError(message) {
+                messanger.flag = true;
                 messanger.message = message;
-                messanger.line = this.current.line;
-                if(this.current)
+                messanger.line = this.current.line + 1;
                 messanger.putError();
+
+                console.log("DUMP");
+                console.log(this.symbol_table);
+                console.log(this.current);
+                console.log(this.next);
+                console.log(this.state);
         }
         postSymbol(scope, is_global) {
 
@@ -2072,7 +2190,7 @@ class Parser {
                                 return true;
                         }
                 }
-                else if(type1 != type2) {
+                else {
                         this.postError("Incompatible type " + type1 + " and " + type2);
                         return true;
                 }
@@ -2097,6 +2215,240 @@ class Parser {
                         }
                 }
                 return false;
+        }
+        updateBuiltin() {
+                // This function just updates the build in functions to the procedure and global symbol table.
+
+                //#region -> getBool() : bool value
+                // Update the symbol table
+                let new_symbol = {
+                        "type"          : "BOOL",
+                        "bound"         : 0,
+                        "value"         : true
+                }
+                this.symbol_table["global"] = {
+                ['GETBOOL'] : new_symbol }
+                // Update the procedure table
+                this.procedure_table["GETBOOL"] = {
+                        "expression"    : [],
+                        "operators"     : [],
+                        "parameters"    : [],
+                        "type"          : this.Operation.Types.procedure,
+                        "value"         : "GETBOOL" 
+                }
+                new_symbol = null;
+                //#endregion
+
+                //#region -> getInteger() : integer value
+                // Update the symbol table
+                new_symbol = {
+                        "type"          : "INTEGER",
+                        "bound"         : 0,
+                        "value"         : true
+                }
+                this.symbol_table["global"]["GETINTEGER"] = new_symbol;
+                // Update the procedure table
+                this.procedure_table["GETINTEGER"] = {
+                        "expression"    : [],
+                        "operators"     : [],
+                        "parameters"    : [],
+                        "type"          : this.Operation.Types.procedure,
+                        "value"         : "GETINTEGER" 
+                }
+                //#endregion
+
+                //#region -> getFloat() : float value
+                // Update the symbol table
+                new_symbol = {
+                        "type"          : "FLOAT",
+                        "bound"         : 0,
+                        "value"         : true
+                }
+                this.symbol_table["global"]["GETFLOAT"] = new_symbol;
+                // Update the procedure table
+                this.procedure_table["GETFLOAT"] = {
+                        "expression"    : [],
+                        "operators"     : [],
+                        "parameters"    : [],
+                        "type"          : this.Operation.Types.procedure,
+                        "value"         : "GETFLOAT" 
+                }
+                //#endregion
+        
+                //#region -> getString() : string value
+                // Update the symbol table
+                new_symbol = {
+                        "type"          : "FLOAT",
+                        "bound"         : 0,
+                        "value"         : true
+                }
+                this.symbol_table["global"]["GETSTRING"] = new_symbol;
+                // Update the procedure table
+                this.procedure_table["GETSTRING"] = {
+                        "expression"    : [],
+                        "operators"     : [],
+                        "parameters"    : [],
+                        "type"          : this.Operation.Types.procedure,
+                        "value"         : "GETSTRING" 
+                }
+                //#endregion
+
+                //#region -> putBool(bool value) : bool
+                // Update the symbol table
+                new_symbol = {
+                        "type"          : "BOOL",
+                        "bound"         : 0,
+                        "value"         : true
+                }
+                this.symbol_table["global"]["PUTBOOL"] = new_symbol;
+                // Update the procedure table
+                this.procedure_table["PUTBOOL"] = {
+                        "expression"    : [],
+                        "operators"     : [],
+                        "parameters"    : [],
+                        "type"          : this.Operation.Types.procedure,
+                        "value"         : "PUTBOOL" 
+                }
+                this.procedure_table["PUTBOOL"].parameters["BL"] = {
+                        "type"          : "BOOL",
+                        "bound"         : 0,
+                        "value"         : true
+                }
+                new_symbol = {
+                        "type"          : "BOOL",
+                        "bound"         : 0,
+                        "value"         : true
+                }
+                this.symbol_table["PUTBOOL"] = {
+                        ["BL"]         : new_symbol
+                }
+                //#endregion
+
+                //#region -> putInteger(integer value) : bool
+                // Update the symbol table
+                new_symbol = {
+                        "type"          : "BOOL",
+                        "bound"         : 0,
+                        "value"         : true
+                }
+                this.symbol_table["global"]["PUTINTEGER"] = new_symbol;
+                this.procedure_table["PUTINTEGER"] = {
+                        "expression"    : [],
+                        "operators"     : [],
+                        "parameters"    : [],
+                        "type"          : this.Operation.Types.procedure,
+                        "value"         : "PUTINTEGER" 
+                }
+                this.procedure_table["PUTINTEGER"].parameters.push({
+                        "key"           : "INT",
+                        "type"          : "INTEGER",
+                        "bound"         : 0,
+                        "value"         : true
+                });
+                new_symbol = {
+                        "type"          : "INTEGER",
+                        "bound"         : 0,
+                        "value"         : true
+                }
+                this.symbol_table["PUTINTEGER"] = {
+                        ["INT"]         : new_symbol
+                }
+                //#endregion
+
+                //#region -> putFloat(float value) : bool
+                // Update the symbol table
+                new_symbol = {
+                        "type"          : "BOOL",
+                        "bound"         : 0,
+                        "value"         : true
+                }
+                this.symbol_table["global"]["PUTFLOAT"] = new_symbol;
+                // Update the procedure table
+                this.procedure_table["PUTFLOAT"] = {
+                        "expression"    : [],
+                        "operators"     : [],
+                        "parameters"    : [],
+                        "type"          : this.Operation.Types.procedure,
+                        "value"         : "PUTFLOAT" 
+                }
+                this.procedure_table["PUTFLOAT"].parameters["FLT"] = {
+                        "type"          : "FLOAT",
+                        "bound"         : 0,
+                        "value"         : true
+                }
+                new_symbol = {
+                        "type"          : "FLOAT",
+                        "bound"         : 0,
+                        "value"         : true
+                }
+                this.symbol_table["PUTBOOL"] = {
+                        ["FLT"]         : new_symbol
+                }
+                //#endregion
+
+                //#region -> putString(string value) : bool
+                // Update the symbol table
+                new_symbol = {
+                        "type"          : "BOOL",
+                        "bound"         : 0,
+                        "value"         : true
+                }
+                this.symbol_table["global"]["PUTSTRING"] = new_symbol;
+                // Update the procedure table
+                this.procedure_table["PUTSTRING"] = {
+                        "expression"    : [],
+                        "operators"     : [],
+                        "parameters"    : [],
+                        "type"          : this.Operation.Types.procedure,
+                        "value"         : "PUTSTRING" 
+                }
+                this.procedure_table["PUTSTRING"].parameters["STR"] = {
+                        "type"          : "STRING",
+                        "bound"         : 0,
+                        "value"         : true
+                }
+                new_symbol = {
+                        "type"          : "STRING",
+                        "bound"         : 0,
+                        "value"         : true
+                }
+                this.symbol_table["PUTSTRING"] = {
+                        ["STR"]         : new_symbol
+                }
+                //#endregion
+                
+                //#region -> sqrt (integer value) : float
+                // Update the symbol table
+                new_symbol = {
+                        "type"          : "FLOAT",
+                        "bound"         : 0,
+                        "value"         : true
+                }
+                this.symbol_table["global"]["SQRT"] = new_symbol;
+                // Update the procedure table
+                this.procedure_table["SQRT"] = {
+                        "expression"    : [],
+                        "operators"     : [],
+                        "parameters"    : [],
+                        "type"          : this.Operation.Types.procedure,
+                        "value"         : "SQRT" 
+                }
+                this.procedure_table["SQRT"].parameters.push({
+                        "key"           : "INT",
+                        "type"          : "INTEGER",
+                        "bound"         : 0,
+                        "value"         : true
+                });
+                new_symbol = {
+                        "type"          : "INTEGER",
+                        "bound"         : 0,
+                        "value"         : true
+                }
+                this.symbol_table["SQRT"] = {
+                        ["INT"]         : new_symbol
+                }
+                //#endregion
+
         }
         //#endregion
 
@@ -2245,15 +2597,13 @@ function main(data) {
         //#endregion
 
         //#region -> STEP 2: Scan the input text 
-        let scanner_fail = null;                        // Declare variable to track if the scanner was successfull.
-        scanner_fail = scanner.scanCode(data.value);    // Call the scanner to generate the tokens array.
-        if(scanner_fail) messanger.flag = true;         // IF the scanner shits out, update messanger flag 
+        scanner.scanCode(data.value);    // Call the scanner to generate the tokens array.
         messanger.token_list = scanner.tokens;          // Update the messanger token list
         //#endregion
 
         //#region -> STEP 3: Parse the tokens
         let parser = new Parser(scanner.tokens.slice());// Initialize the parser
-        messanger.flag = parser.parseTokens()           // Parse the tokens
+        parser.parseTokens();           // Parse the tokens
         messanger.program.name = parser.program.name;   
         messanger.program.parser_ops = parser.program;
         //#endregion

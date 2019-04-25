@@ -8,6 +8,7 @@ const front_end = new Worker("/javascripts/compiler/front.js");
 document.getElementById("Scanner").addEventListener("click", switch_toScanner);
 document.getElementById("Parser").addEventListener("click", switch_toParser);
 document.getElementById("Code").addEventListener("click", switch_toCode);
+document.getElementById("Language").addEventListener("click", switch_toLanguage);
 
 
 class Print {
@@ -54,7 +55,12 @@ function parser(ops, tab) {
             printer.print_result = printer.print_result + space + "TO: " + operation.value.key + ",TYPE: " + operation.value.type + ",INDEX " + operation.value.index + ",BOUND: " + operation.value.bound + "\n";
             printer.print_result = printer.print_result + space + "FROM EXPRESSION: ";
             operation.expression.forEach(function(argument) {
-                printer.print_result = printer.print_result + "[" + argument.type + "," + argument.value + "]";
+                if(argument.value == "IDEN") {
+                    printer.print_result = printer.print_result + "[" + argument.key + "," + argument.type + "," + argument.value + "," + argument.index + "," + argument.bound + "]";
+                }
+                else {
+                    printer.print_result = printer.print_result + "[" + argument.type + "," + argument.value + "]";
+                }
             });
             printer.print_result = printer.print_result + "\n";
             break;
@@ -62,12 +68,22 @@ function parser(ops, tab) {
             printer.print_result = printer.print_result + space + "LOOP -> \n";
             printer.print_result = printer.print_result + space + "VARIABLE: " + operation.value.value.key + ",EXPRESSION: ";
             operation.value.expression.forEach(function(argument) {
-                printer.print_result = printer.print_result + "[" + argument.type + "," + argument.value + "]";
+                if(argument.value == "IDEN") {
+                    printer.print_result = printer.print_result + "[" + argument.key + "," + argument.type + "," + argument.value + "," + argument.index + "," + argument.bound + "]";
+                }
+                else {
+                    printer.print_result = printer.print_result + "[" + argument.type + "," + argument.value + "]";
+                }
             });
             printer.print_result = printer.print_result + space + "\n";
             printer.print_result = printer.print_result + space + "EXPRESSION: ";
             operation.expression.forEach(function(argument) {
-                printer.print_result = printer.print_result + "[" + argument.type + "," + argument.value + "]";
+                if(argument.value == "IDEN") {
+                    printer.print_result = printer.print_result + "[" + argument.key + "," + argument.type + "," + argument.value + "," + argument.index + "," + argument.bound + "]";
+                }
+                else {
+                    printer.print_result = printer.print_result + "[" + argument.type + "," + argument.value + "]";
+                }
             });
             printer.print_result = printer.print_result + "\n";
             printer.print_result = printer.print_result + space + "OPERATIONS -> \n";
@@ -80,7 +96,12 @@ function parser(ops, tab) {
             printer.print_result = printer.print_result + space + "IF STATEMENT -> \n";
             printer.print_result = printer.print_result + space + "EXPRESSION: ";
             operation.expression.forEach(function(argument) {
-                printer.print_result = printer.print_result + "[" + argument.type + "," + argument.value + "]";
+                if(argument.value == "IDEN") {
+                    printer.print_result = printer.print_result + "[" + argument.key + "," + argument.type + "," + argument.value + "," + argument.index + "," + argument.bound + "]";
+                }
+                else {
+                    printer.print_result = printer.print_result + "[" + argument.type + "," + argument.value + "]";
+                }
             });
             printer.print_result = printer.print_result + "\n";
             printer.print_result = printer.print_result + space + "OPERATIONS -> \n";
@@ -99,7 +120,12 @@ function parser(ops, tab) {
             printer.print_result = printer.print_result + space + "PROCEDURE " + operation.value + " -> \n";
             printer.print_result = printer.print_result + space + "PARAMETERS: ";
             operation.parameters.forEach(function(argument) {
-                printer.print_result = printer.print_result + "[" + argument.type + "," + argument.key + "]";
+                if(argument.value == "IDEN") {
+                    printer.print_result = printer.print_result + "[" + argument.key + "," + argument.type + "," + argument.value + "," + argument.index + "," + argument.bound + "]";
+                }
+                else {
+                    printer.print_result = printer.print_result + "[" + argument.type + "," + argument.value + "]";
+                }
             });
             printer.print_result = printer.print_result + "\n";
             printer.print_result = printer.print_result + space + "OPERATIONS -> \n";
@@ -130,6 +156,11 @@ function switch_toCode() {
     if(front_message != null) printResult();
 }
 
+function switch_toLanguage() {
+    state = "LANGUAGE";
+    if(front_message != null) printResult();
+}
+
 var front_message = null;
 front_end.onmessage = function(e) {
     // See where the error is
@@ -137,7 +168,6 @@ front_end.onmessage = function(e) {
     front_message = e.data;
 
     editor.getSession().clearAnnotations();
-    console.log(e.data);
     if(e.data.error == true) {
         var length = e.data.list.length - 1;
         var i = 0;
@@ -166,11 +196,137 @@ function printResult() {
         });
         break;
         case "PARSER":
-        console.log(front_message.program.parser_ops);
         printer.printParser(front_message.program.parser_ops.operations);
         return; 
         case "CODE":
         print_result = " << CODE OUTPUT >> \n";
+        break;
+        case "LANGUAGE":
+        print_result = " << LANGUAGE >> \n";
+        print_result = print_result + "<program> ::= " + "\n" +
+        "   <program_header> <program_body> . " + "\n" +
+        "\n" +
+        "<program_header> ::= program <identifier> is" + "\n" +
+        "\n" + 
+        "<program_body> ::= " + "\n" +
+        "       ( <declaration> ; )*" + "\n" +
+        "begin" +  "\n" +
+        "       ( <statement> ; )*" +  "\n" +
+        "end program" + "\n" +
+        "\n" +
+        "<declaration> ::=" + "\n" +
+        "       [ global ] <procedure_declaration>" + "\n" +
+        "|      [ global ] <variable_declaration>" + "\n" +
+        "|      [ global ] <type_declaration>" + "\n" +
+        "\n" +
+        "<procedure_declaration> ::=" + "\n" +
+        "   <procedure_header> <procedure_body>" + "\n" +
+        "<procedure_header> :: = " + "\n" +
+        "   procedure <identifier> : <type_mark>" + "\n" +
+        "           ( [<parameter_list>] ) " + "\n" +
+        "\n" +
+        "<parameter_list> ::= " + "\n" +
+        "   <parameter> , <parameter_list>" + "\n" +
+        "|  <parameter>" + "\n" +
+        "\n" +
+        "<parameter> ::= <variable_declaration>" + "\n" +
+        "\n" +
+        "<procedure_body> ::=" + "\n" +
+        "               ( <declaration> ; )*" + "\n" +
+        "   begin" + "\n" +
+        "               ( <statement> ; )*" + "\n" +
+        "   end procedure" + "\n" +
+        "\n" +
+        "<variable_declaration> ::=" + "\n" +
+        "   variable <identifier>: <type_mark>" + "\n" +
+        "           [ [ <bound> ] ]" + "\n" +
+        "\n" +
+        "<type_declaration> ::=" + "\n" +
+        "   type <identifier> is <type_mark>" + "\n" +
+        "\n" +
+        "<type_mark>" + "\n" +
+        "   integer | float | string | bool" + "\n" +
+        "|  <identifier>" + "\n" +
+        "|  enum { <identifier> ( , <identifier> )* }" + "\n" +
+        "\n" +
+        "<bound> ::= <number>"+ "\n" +
+        "\n" +
+        "<statement> ::="+ "\n" +
+        "   <assignment_statement>"+ "\n" +
+        "|  <if_statement>"+ "\n" +
+        "|  <loop_statement>"+ "\n" +
+        "|  <return_statement>"+ "\n" +
+        "\n" +
+        "<procedure_call> ::="+ "\n" +
+        "   <identifier> ( [<argument_list>] )"+ "\n" +
+        "\n" +
+        "<assignment_statement> ::="+ "\n" +
+        "   <destination> := <expression>"+ "\n" +
+        "\n" +
+        "<destination> ::="+ "\n" +
+        "   <identifier> [ [ <expression> ] ]"+ "\n" +
+        "\n" +
+        "<if_statement> ::="+ "\n" +
+        "   if ( <expression> ) then ( <statement> ; )*"+ "\n" +
+        "   [ else ( <statement> ; )* ]"+ "\n" +
+        "   end if"+ "\n" +
+        "\n" +
+        "<loop_statement> ::="+ "\n" +
+        "   for ( <assignment_statement> ;"+ "\n" +
+        "           <expression> )"+ "\n" +
+        "           ( <statement> ; )*"+ "\n" +
+        "   end for"+ "\n" +
+        "\n" +
+        "<return_statement> ::= return <expression>"+ "\n" +
+        "\n" +
+        "<identifier> ::= [a-zA-Z][a-zA-Z0-9_]*"+ "\n" +
+        "\n" +
+        "<expression> ::="+ "\n" +
+        "   <expression> & <arithOp>"+ "\n" +
+        "|  <expression> | <arithOp>"+ "\n" +
+        "|  [ not ] <arithOp>"+ "\n" +
+        "\n" +
+        "<arithOp> ::="+ "\n" +
+        "   <arithOp> + <relation>"+ "\n" +
+        "|  <arithOp> - <relation>"+ "\n" +
+        "|  <relation>"+ "\n" +
+        "\n" +
+        "<relation> ::="+ "\n" +
+        "   <relation> < <term>"+ "\n" +
+        "|  <relation> >= <term>"+ "\n" +
+        "|  <relation> <= <term>"+ "\n" +
+        "|  <relation> > <term>"+ "\n" +
+        "|  <relation> == <term>"+ "\n" +
+        "|  <relation> != <term>"+ "\n" +
+        "|  <term>"+ "\n" +
+        "\n" +
+        "<term> ::="+ "\n" +
+        "   <term> * <factor>"+ "\n" +
+        "|  <term> / <factor>"+ "\n" +
+        "|  <factor>"+ "\n" +
+        "\n" +
+        "<factor> ::="+ "\n" +
+        "   ( <expression> )"+ "\n" +
+        "|  <procedure_call>"+ "\n" +
+        "|  [ - ] <name>"+ "\n" +
+        "|  [ - ] <number>"+ "\n" +
+        "|  <string>"+ "\n" +
+        "|  true"+ "\n" +
+        "|  false"+ "\n" +
+        "\n" +
+        "<name> ::="+ "\n" +
+        "   <identifier> [ [ <expression> ] ]"+ "\n" +
+        "\n" +
+        "<argument_list> ::="+ "\n" +
+        "   <expression> , <argument_list>"+ "\n" +
+        "|  <expression>"+ "\n" +
+        "\n" +
+        "<number> ::= [0-9][0-9_]*[.[0-9_]*]"+ "\n" +
+        "END"+ "\n" +
+        "\n" +
+        "\n" +
+        "\n" +
+        "\n" ;
         break;
         default:
         print_result = " Select an output. \n";
