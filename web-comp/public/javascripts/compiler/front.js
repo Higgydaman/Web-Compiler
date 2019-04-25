@@ -462,6 +462,34 @@ class Scanner {
 }
 var scanner = new Scanner();
 
+var Operation = {
+        Types : {
+                "start"         : 1,
+                "procedure"     : 2,
+                "assignment"    : 3,
+                "loop"          : 4,
+                "NA"            : 5,
+                "IF"            : 6,
+                "end_program"   : 7,
+                "end_if"        : 8,
+                "ELSE"          : 9,
+                "end_for"       : 10,
+                "end_procedure" : 11,
+                "return"        : 12
+        }
+};
+
+var States = { // Used to drive the parse path
+        "start"         : 1,
+        "declaration"   : 2,
+        "statement"     : 3,
+        "end"           : 4,
+        Procedure : {
+                "declaration"   : 5,
+                "statement"     : 6
+        }
+};
+
 class Parser {
         constructor(tokens) {
                 //#region -> Input verification
@@ -480,7 +508,7 @@ class Parser {
                 }
                 this.next = this.tokens.shift();
                 this.errors = [];
-                this.state = this.States.start;
+                this.state = States.start;
                 this.symbol_table = new Object();
                 this.enum_count = 0;
                 this.procedure_table = new Object();
@@ -497,11 +525,11 @@ class Parser {
                 
                 //#region -> Get an operation
                 if(this.getOperation("program")) return true;   // Call the operation function
-                if(this.operation.type == this.Operation.Types.start) {
+                if(this.operation.type == Operation.Types.start) {
                         this.program.name = this.operation.value;
                 }
                 this.program.operations.push(this.operation);   // Update the program
-                if(this.state == this.States.end_program) return false;
+                if(this.state == States.end_program) return false;
                 //#endregion
                 
                 //#region -> Save off that operation
@@ -514,32 +542,6 @@ class Parser {
         //#endregion
 
         //#region -> Operation management
-        Operation = {
-                Types : {
-                        "start"         : 1,
-                        "procedure"     : 2,
-                        "assignment"    : 3,
-                        "loop"          : 4,
-                        "NA"            : 5,
-                        "IF"            : 6,
-                        "end_program"   : 7,
-                        "end_if"        : 8,
-                        "ELSE"          : 9,
-                        "end_for"       : 10,
-                        "end_procedure" : 11,
-                        "return"        : 12
-                }
-        }
-        States = { // Used to drive the parse path
-                "start"         : 1,
-                "declaration"   : 2,
-                "statement"     : 3,
-                "end"           : 4,
-                Procedure : {
-                        "declaration"   : 5,
-                        "statement"     : 6
-                }
-        }
         getOperation(scope){  
                 //#region -> Gather operation
                 this.operation = {
@@ -549,16 +551,16 @@ class Parser {
                         "operations" : [] 
                 }
                 switch(this.state) {
-                        case this.States.start:
+                        case States.start:
                         if(this.getStart()) return true;          // P&D TODO ERROR RECOVERY
-                        this.state = this.States.declaration;     // Switch state
+                        this.state = States.declaration;     // Switch state
                         break;
-                        case this.States.declaration:
+                        case States.declaration:
                         if(this.getDeclaration(scope)) return true;// P&D TODO ERROR RECOVERY
-                        if(this.state == this.States.statement)  return this.getOperation(scope);
-                        if(this.operation.type == this.Operation.Types.procedure) return false; // Go store that
+                        if(this.state == States.statement)  return this.getOperation(scope);
+                        if(this.operation.type == Operation.Types.procedure) return false; // Go store that
                         break;
-                        case this.States.statement:
+                        case States.statement:
                         if(this.getStatement(scope))  return true;
                         break;
                         default:
@@ -570,14 +572,14 @@ class Parser {
               //#region -> End evaluation and continue
               return false;
               //#endregion
-        }
+        };
         //#endregion
 
         //#region -> Parsing utilities
         getStart() {
                 // Standard start
                 if(this.getToken()) return true;
-                this.operation.type = this.Operation.Types.start;
+                this.operation.type = Operation.Types.start;
 
                 // Check syntax
                 if(this.current.value == "PROGRAM") {
@@ -597,7 +599,7 @@ class Parser {
                         return true;
                 }
 
-        }
+        };
         getDeclaration(scope) {
                 if(this.getToken()) return true; //"STRT""END"
                
@@ -637,7 +639,7 @@ class Parser {
 
                                 // Declare the procedure operation
                                 let temp_operation = {
-                                        "type"       : this.Operation.Types.procedure,
+                                        "type"       : Operation.Types.procedure,
                                         "value"      : this.next.value,
                                         "parameters" : [],
                                         "expression" : [],
@@ -711,7 +713,7 @@ class Parser {
                                 
                         
                                 // Set the current state
-                                this.state = this.States.Procedure.declaration;
+                                this.state = States.Procedure.declaration;
                                 gathering = true;
                                 // We need to back up for future calls
                                 this.tokens.unshift(this.next);
@@ -722,7 +724,7 @@ class Parser {
                                 // Build the procedure
                                 while(gathering) {
                                         switch(this.state) {
-                                                case this.States.Procedure.declaration:
+                                                case States.Procedure.declaration:
                                                 this.operation = {
                                                         "type"       : null,
                                                         "value"      : null,
@@ -731,7 +733,7 @@ class Parser {
                                                         "operations" : [] 
                                                 }
                                                 if(this.getDeclaration(temp_operation.value)) return true;
-                                                if(this.operation.type == this.Operation.Types.procedure) {
+                                                if(this.operation.type == Operation.Types.procedure) {
                                                         temp_operation.operations.push(this.operation);
                                                         this.procedure_table[temp_operation.value] = temp_operation; // Store a temp for now
                                                         this.operation = {
@@ -742,13 +744,13 @@ class Parser {
                                                                 "operations" : [] 
                                                         }
                                                 }
-                                                else if(this.state == this.States.Procedure.statement) break;
+                                                else if(this.state == States.Procedure.statement) break;
                                                 else {
                                                         this.postError("Internal error.");
                                                         return true;
                                                 }
                                                 break;
-                                                case this.States.Procedure.statement:
+                                                case States.Procedure.statement:
                                                 this.operation = {
                                                         "type"       : null,
                                                         "value"      : null,
@@ -757,8 +759,8 @@ class Parser {
                                                         "operations" : [] 
                                                 }
                                                 if(this.getStatement(temp_operation.value)) return true;
-                                                if(this.operation.type == this.Operation.Types.end_procedure) gathering = false;
-                                                else if(this.operation == this.Operation.Types.end_program) {
+                                                if(this.operation.type == Operation.Types.end_procedure) gathering = false;
+                                                else if(this.operation == Operation.Types.end_program) {
                                                         this.postError("Expected the END PROCEDURE keywords while parsing procedure.");
                                                         return true;
                                                 }
@@ -806,11 +808,11 @@ class Parser {
                         //#region -> START
                         case "STRT":
                         if(this.current.value == "BEGIN") {
-                                if(this.state == this.States.Procedure.declaration) {
-                                        this.state = this.States.Procedure.statement;
+                                if(this.state == States.Procedure.declaration) {
+                                        this.state = States.Procedure.statement;
                                         return false;
                                 }
-                                this.state = this.States.statement;
+                                this.state = States.statement;
                                 return false;
                         }
                         else {
@@ -825,7 +827,7 @@ class Parser {
                         return true;
                         //#endregion
                 }
-        }
+        };
         getStatement(scope) {
 
                 if(this.getToken()) return true;
@@ -839,14 +841,14 @@ class Parser {
                                 return true;
                         }
 
-                        if(this.state != this.States.Procedure.statement) {
+                        if(this.state != States.Procedure.statement) {
                                 this.postError("Unexpected return statement from main program.");
                                 return true;
                         }
 
                         if(this.postExpression(scope)) return true;
 
-                        this.operation.type = this.Operation.Types.return;
+                        this.operation.type = Operation.Types.return;
                         this.operation.expression = this.expression_result;
 
                         if(this.current.value != ";") {
@@ -972,7 +974,7 @@ class Parser {
 
                                 if(this.postExpression(scope)) return true;
 
-                                this.operation.type = this.Operation.Types.assignment;
+                                this.operation.type = Operation.Types.assignment;
                                 this.operation.expression = this.expression_result;
 
                                 if(this.expression_result.length == 0) {
@@ -985,7 +987,7 @@ class Parser {
                                 if(this.existsGlobally(this.current_identifier)) temp_scope = "global";
 
                                 // IF we are NOT in global scope, AND we are in a procedure
-                                if(!(this.state == this.States.Procedure.statement && temp_scope == "global")) {
+                                if(!(this.state == States.Procedure.statement && temp_scope == "global")) {
                                         this.symbol_table[temp_scope][this.current_identifier].value = true;
                                 }
 
@@ -1031,8 +1033,8 @@ class Parser {
                                 if(this.getToken()) return true;
                                 if(this.next.value == ".") {
                                         if(this.getToken()) return true;
-                                        this.state = this.States.end_program;
-                                        this.operation.type = this.Operation.Types.end_program;
+                                        this.state = States.end_program;
+                                        this.operation.type = Operation.Types.end_program;
                                         return false;
                                 }
                                 else {
@@ -1042,17 +1044,17 @@ class Parser {
                         }
                         else if(this.next.value == "IF") {
                                 if(this.getToken()) return true;
-                                this.operation.type = this.Operation.Types.end_if;
+                                this.operation.type = Operation.Types.end_if;
                                 return false;
                         }
                         else if(this.next.value == "FOR") {
                                 if(this.getToken()) return true;
-                                this.operation.type = this.Operation.Types.end_for;
+                                this.operation.type = Operation.Types.end_for;
                                 return false;
                         }
                         else if(this.next.value == "PROCEDURE") {
                                 if(this.getToken()) return true;
-                                this.operation.type = this.Operation.Types.end_procedure;
+                                this.operation.type = Operation.Types.end_procedure;
                                 if(this.next.value != ";") {
                                         this.postError("expected an end of line character ; to end procedure. ");
                                         return true;
@@ -1072,7 +1074,7 @@ class Parser {
                         return true;
                         //#endregion
                 }
-        }
+        };
         postFor(scope) {
                 if(this.getToken()) return true;
 
@@ -1094,7 +1096,7 @@ class Parser {
                         "operations" : [] 
                 }
                 if(this.getStatement(scope)) return true;       // Grab a statement
-                if(this.operation.type != this.Operation.Types.assignment) {
+                if(this.operation.type != Operation.Types.assignment) {
                         this.postError("Expected assignment statement to start FOR loop.");
                         return true;
                 }
@@ -1128,18 +1130,18 @@ class Parser {
                                 "operations" : [] 
                         }
                         if(this.getStatement(scope)) return true;
-                        if(this.operation.type == this.Operation.Types.end_program) {
+                        if(this.operation.type == Operation.Types.end_program) {
                                 this.postError("Expected END IF to end IF statements. ");
                                 return true;
                         }
                         temp_operation.operations.push(this.operation);
-                        if(this.operation.type == this.Operation.Types.end_for) break;
+                        if(this.operation.type == Operation.Types.end_for) break;
                 }
 
                 this.operation = temp_operation;
-                this.operation.type = this.Operation.Types.loop;
+                this.operation.type = Operation.Types.loop;
                 return false;
-        }
+        };
         postIf(scope) {
 
                 // Save off the current operation to be saved upon later
@@ -1181,18 +1183,18 @@ class Parser {
                                 "operations" : [] 
                         }
                         if(this.next.value == "ELSE") {
-                                this.operation.type = this.Operation.Types.ELSE;
+                                this.operation.type = Operation.Types.ELSE;
                                 if(this.getToken()) return true;
                         }
                         else {
                                 if(this.getStatement(scope)) return true;
-                                if(this.operation.type == this.Operation.Types.end_program) {
+                                if(this.operation.type == Operation.Types.end_program) {
                                         this.postError("Expected END IF to end IF statements. ");
                                         return true;
                                 }
                         }
                         temp_operation.operations.push(this.operation);
-                        if(this.operation.type == this.Operation.Types.end_if) break;
+                        if(this.operation.type == Operation.Types.end_if) break;
                 }
 
                 // Shweet we made it
@@ -1203,9 +1205,9 @@ class Parser {
 
 
                 this.operation = temp_operation;
-                this.operation.type = this.Operation.Types.IF;
+                this.operation.type = Operation.Types.IF;
                 return false;
-        }
+        };
         postExpression(scope) {
                 // Some things we need to keep track of
                 this.return_type = null;        // Used for the caller to check upon assignment
@@ -1334,7 +1336,7 @@ class Parser {
                                         if(this.existsGlobally(this.current.value)) temp_scope = "global";
                                         
                                         // If the caller wants to check if the value has been set yet
-                                        if(!(this.state == this.States.Procedure.statement && temp_scope == "global")) {
+                                        if(!(this.state == States.Procedure.statement && temp_scope == "global")) {
                                                 if(this.symbol_table[temp_scope][this.current.value].value == false) {
                                                         this.postError("Variable has not been set yet.");
                                                         return true;
@@ -1613,7 +1615,7 @@ class Parser {
                         return false;
                 }
                 else return false;
-        }
+        };
         postProcedure(scope, list) {
                 
                 // OK, now call postExpression() for every built list
@@ -1653,7 +1655,7 @@ class Parser {
                 this.expressions = temp_expression;
                 return false;
    
-        }
+        };
         // Reverses a list of tokens for an expression call
         reverseTokens(list) {
                 // Restore the current NEXT token
@@ -1668,7 +1670,7 @@ class Parser {
                         this.tokens.unshift(list[item]);
                 }
                 this.next = this.tokens.shift();
-        }
+        };
         getExpression(scope, argument_list) {
 
                 if(argument_list.length == 1) {
@@ -2010,7 +2012,7 @@ class Parser {
                         return this.getExpression(scope, temp_array);
                 }
                 return false;
-        }
+        };
         postError(message) {
                 messanger.flag = true;
                 messanger.message = message;
@@ -2022,7 +2024,7 @@ class Parser {
                 console.log(this.current);
                 console.log(this.next);
                 console.log(this.state);
-        }
+        };
         postSymbol(scope, is_global) {
 
                 if(this.getToken()) return true;
@@ -2080,10 +2082,10 @@ class Parser {
 
                 // Go an store the type mark
                 if(this.postTypemark(temp_scope, symbol.value)) return true;
-                this.operation.type = this.Operation.Types.NA;
+                this.operation.type = Operation.Types.NA;
                 // Party on Garth
                 return false;
-        }
+        };
         postTypemark(scope, name) {
 
                 if(this.getToken()) return true;
@@ -2119,7 +2121,7 @@ class Parser {
                         this.postError("Expected type mark.");
                         return true;
                 }
-        }
+        };
         existsGlobally(name) {
                 try {
                         if(typeof this.symbol_table["global"][name] != 'undefined') {
@@ -2130,7 +2132,7 @@ class Parser {
                 catch(TypeError) {
                         return false;
                 }
-        }
+        };
         existsLocally(scope, name) {
                 try {
                         if(typeof this.symbol_table[scope][name] === 'undefined' || this.symbol_table[scope][name] == null || typeof this.symbol_table[scope][name] == null) {
@@ -2142,7 +2144,7 @@ class Parser {
                 catch(TypeError) {
                         return false;
                 }
-        }
+        };
         postBound(scope, name) {
                 // Get the current token
                 if(this.getToken()) return true;
@@ -2161,7 +2163,7 @@ class Parser {
                         return true;
                 }
 
-        }
+        };
         typeCheck(type1,type2) {
                 if(type1 == "INTEGER") {
                         if(type2 == "INTEGER" || type2 == "BOOL" || type2 == "FLOAT") {
@@ -2196,7 +2198,7 @@ class Parser {
                 }
                 
                 return false;
-        }
+        };
         checkBounds(symbol, expression, index) {
                 for(let i in expression) {
                         if(expression[i].value == "IDEN") {
@@ -2215,7 +2217,7 @@ class Parser {
                         }
                 }
                 return false;
-        }
+        };
         updateBuiltin() {
                 // This function just updates the build in functions to the procedure and global symbol table.
 
@@ -2233,7 +2235,7 @@ class Parser {
                         "expression"    : [],
                         "operators"     : [],
                         "parameters"    : [],
-                        "type"          : this.Operation.Types.procedure,
+                        "type"          : Operation.Types.procedure,
                         "value"         : "GETBOOL" 
                 }
                 new_symbol = null;
@@ -2252,7 +2254,7 @@ class Parser {
                         "expression"    : [],
                         "operators"     : [],
                         "parameters"    : [],
-                        "type"          : this.Operation.Types.procedure,
+                        "type"          : Operation.Types.procedure,
                         "value"         : "GETINTEGER" 
                 }
                 //#endregion
@@ -2270,7 +2272,7 @@ class Parser {
                         "expression"    : [],
                         "operators"     : [],
                         "parameters"    : [],
-                        "type"          : this.Operation.Types.procedure,
+                        "type"          : Operation.Types.procedure,
                         "value"         : "GETFLOAT" 
                 }
                 //#endregion
@@ -2288,7 +2290,7 @@ class Parser {
                         "expression"    : [],
                         "operators"     : [],
                         "parameters"    : [],
-                        "type"          : this.Operation.Types.procedure,
+                        "type"          : Operation.Types.procedure,
                         "value"         : "GETSTRING" 
                 }
                 //#endregion
@@ -2306,7 +2308,7 @@ class Parser {
                         "expression"    : [],
                         "operators"     : [],
                         "parameters"    : [],
-                        "type"          : this.Operation.Types.procedure,
+                        "type"          : Operation.Types.procedure,
                         "value"         : "PUTBOOL" 
                 }
                 this.procedure_table["PUTBOOL"].parameters["BL"] = {
@@ -2336,7 +2338,7 @@ class Parser {
                         "expression"    : [],
                         "operators"     : [],
                         "parameters"    : [],
-                        "type"          : this.Operation.Types.procedure,
+                        "type"          : Operation.Types.procedure,
                         "value"         : "PUTINTEGER" 
                 }
                 this.procedure_table["PUTINTEGER"].parameters.push({
@@ -2368,7 +2370,7 @@ class Parser {
                         "expression"    : [],
                         "operators"     : [],
                         "parameters"    : [],
-                        "type"          : this.Operation.Types.procedure,
+                        "type"          : Operation.Types.procedure,
                         "value"         : "PUTFLOAT" 
                 }
                 this.procedure_table["PUTFLOAT"].parameters["FLT"] = {
@@ -2399,7 +2401,7 @@ class Parser {
                         "expression"    : [],
                         "operators"     : [],
                         "parameters"    : [],
-                        "type"          : this.Operation.Types.procedure,
+                        "type"          : Operation.Types.procedure,
                         "value"         : "PUTSTRING" 
                 }
                 this.procedure_table["PUTSTRING"].parameters["STR"] = {
@@ -2430,7 +2432,7 @@ class Parser {
                         "expression"    : [],
                         "operators"     : [],
                         "parameters"    : [],
-                        "type"          : this.Operation.Types.procedure,
+                        "type"          : Operation.Types.procedure,
                         "value"         : "SQRT" 
                 }
                 this.procedure_table["SQRT"].parameters.push({
@@ -2449,7 +2451,7 @@ class Parser {
                 }
                 //#endregion
 
-        }
+        };
         //#endregion
 
         //#region -> Token management
@@ -2490,6 +2492,26 @@ class Parser {
         //#endregion       
         
 }
+class Code {
+        constructor(program, symbols, procedures) {
+                this.flag = false;
+                this.code = [];
+                if(messanger.flag) {
+                        this.flag = true;
+                        this.code.push("Errors Exist");
+                }
+        }
+
+        generateCode() {
+                if(this.flag) return true;
+
+                // Write the beggining stuff that is needed, like fileio and what not
+
+
+
+                return false;
+        }
+}
 
 class Message {
         constructor() {
@@ -2506,6 +2528,7 @@ class Message {
                         "name"          : "El Stupido",
                         "variables"     : null,
                         "parser_ops"    : [],
+                        "code"          : [],
                         "statements"    : null
                 }
 
@@ -2530,6 +2553,7 @@ class Message {
                         "name"          : "El Stupido",
                         "variables"     : null,
                         "parser_ops"    : [],
+                        "code"          : [],
                         "statements"    : null
                 }
 
@@ -2555,6 +2579,7 @@ class Message {
                         "name"          : "El Stupido",
                         "variables"     : null,
                         "parser_ops"    : [],
+                        "code"          : [],
                         "statements"    : null
                 }
 
@@ -2609,7 +2634,9 @@ function main(data) {
         //#endregion
 
         //#region -> STEP 4: Generate code
-
+        var generator = new Code(parser.program, parser.symbol_table, parser.procedure_table);
+        generator.generateCode();                       // Generate the code
+        messanger.program.code = generator.code;
         //#endregion
 
         //#region -> STEP 5: Make call to server for output

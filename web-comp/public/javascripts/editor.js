@@ -10,21 +10,21 @@ document.getElementById("Parser").addEventListener("click", switch_toParser);
 document.getElementById("Code").addEventListener("click", switch_toCode);
 document.getElementById("Language").addEventListener("click", switch_toLanguage);
 
+Types = {
+    "start"         : 1,
+    "procedure"     : 2,
+    "assignment"    : 3,
+    "loop"          : 4,
+    "NA"            : 5,
+    "IF"            : 6,
+    "end_program"   : 7,
+    "end_if"        : 8,
+    "ELSE"          : 9,
+    "end_for"       : 10,
+    "end_procedure" : 11
+};
 
-class Print {
-    Types = {
-        "start"         : 1,
-        "procedure"     : 2,
-        "assignment"    : 3,
-        "loop"          : 4,
-        "NA"            : 5,
-        "IF"            : 6,
-        "end_program"   : 7,
-        "end_if"        : 8,
-        "ELSE"          : 9,
-        "end_for"       : 10,
-        "end_procedure" : 11
-    }   
+class Print {   
     printParser(ops) {
         this.print_result = "";
         parser(ops, 0);
@@ -47,10 +47,10 @@ function parser(ops, tab) {
     }
     ops.forEach(function(operation) {
         switch(operation.type) {
-            case printer.Types.start:
+            case Types.start:
             printer.print_result = printer.print_result + "START PROGRAM: " + operation.value + "\n";
             break;
-            case printer.Types.assignment:
+            case Types.assignment:
             printer.print_result = printer.print_result + space + "ASSIGNMENT -> \n";
             printer.print_result = printer.print_result + space + "TO: " + operation.value.key + ",TYPE: " + operation.value.type + ",INDEX " + operation.value.index + ",BOUND: " + operation.value.bound + "\n";
             printer.print_result = printer.print_result + space + "FROM EXPRESSION: ";
@@ -64,7 +64,7 @@ function parser(ops, tab) {
             });
             printer.print_result = printer.print_result + "\n";
             break;
-            case printer.Types.loop:
+            case Types.loop:
             printer.print_result = printer.print_result + space + "LOOP -> \n";
             printer.print_result = printer.print_result + space + "VARIABLE: " + operation.value.value.key + ",EXPRESSION: ";
             operation.value.expression.forEach(function(argument) {
@@ -89,10 +89,10 @@ function parser(ops, tab) {
             printer.print_result = printer.print_result + space + "OPERATIONS -> \n";
             parser(operation.operations, tab + 1);
             break;
-            case printer.Types.end_for:
+            case Types.end_for:
             printer.print_result = printer.print_result + less_space + "END FOR \n";
             break;
-            case printer.Types.IF:
+            case Types.IF:
             printer.print_result = printer.print_result + space + "IF STATEMENT -> \n";
             printer.print_result = printer.print_result + space + "EXPRESSION: ";
             operation.expression.forEach(function(argument) {
@@ -107,16 +107,16 @@ function parser(ops, tab) {
             printer.print_result = printer.print_result + space + "OPERATIONS -> \n";
             parser(operation.operations, tab + 1);
             break; 
-            case printer.Types.end_if:
+            case Types.end_if:
             printer.print_result = printer.print_result + less_space + "END IF \n";
             break;
-            case printer.Types.ELSE:
+            case Types.ELSE:
             printer.print_result = printer.print_result + space + "ELSE \n";
             break;
-            case printer.Types.end_program:
+            case Types.end_program:
             printer.print_result = printer.print_result + "END PROGRAM \n";
             break;
-            case printer.Types.procedure:
+            case Types.procedure:
             printer.print_result = printer.print_result + space + "PROCEDURE " + operation.value + " -> \n";
             printer.print_result = printer.print_result + space + "PARAMETERS: ";
             operation.parameters.forEach(function(argument) {
@@ -131,7 +131,7 @@ function parser(ops, tab) {
             printer.print_result = printer.print_result + space + "OPERATIONS -> \n";
             parser(operation.operations, tab + 1);
             break;
-            case printer.Types.end_procedure:
+            case Types.end_procedure:
             printer.print_result = printer.print_result + less_space + "END PROCEDURE \n";
             break;
         }
@@ -200,9 +200,13 @@ function printResult() {
         return; 
         case "CODE":
         print_result = " << CODE OUTPUT >> \n";
+        front_message.program.code.forEach(function(line) {
+            print_result = print_result + line + "\n";
+        });
         break;
         case "LANGUAGE":
         print_result = " << LANGUAGE >> \n";
+        //#region Program Language Print .. its big
         print_result = print_result + "<program> ::= " + "\n" +
         "   <program_header> <program_body> . " + "\n" +
         "\n" +
@@ -327,6 +331,7 @@ function printResult() {
         "\n" +
         "\n" +
         "\n" ;
+        //#endregion
         break;
         default:
         print_result = " Select an output. \n";
