@@ -337,7 +337,7 @@ class Scanner {
                                         
                                         // END
                                         case "NOT":
-                                        this.type = "NOT";
+                                        this.type = "EXOP";
                                         this.value = "!";
                                         break;
 
@@ -1328,7 +1328,7 @@ class Parser {
                                 break;
                                 //#endregion -> AROP
                                 
-                                //#region -> INDETIFIER
+                                //#region -> INDENTIFIER
                                 case "IDEN":
                                 if(this.next.value == ":") {
                                         // Holy fuck back up bro
@@ -1567,39 +1567,63 @@ class Parser {
                                 //#region -> RLOP && EXOP
                                 case "RLOP":
                                 case "EXOP":
-                                if(this.current.value == "=") {
+                                switch(this.current.value) {
+                                        case "!":
+                                        if(this.getToken()) return true;
+                                        if(!(this.current.type == "BOOL" || this.current.type == "INTEGER")) {
+                                                this.postError("Unexpected argument type on operator NOT.");
+                                                return true;
+                                        }
+                                        if(negative) {
+                                                this.postError("Negative NOT? Really?");
+                                                return true;
+                                        }
+                                        if(this.current.value == 0) {
+                                                argument = {
+                                                        "type"  : "INTEGER",
+                                                        "value" : 1
+                                                }
+                                        }
+                                        else {
+                                                argument = {
+                                                        "type"  : "INTEGER",
+                                                        "value" : 0
+                                                }
+                                        }
+                                        break;
+                                        case "=":
                                         this.postError("Unexpected equals sign within expression.");
                                         return true;
-                                }
-                                if(this.current.value == "<") {
+                                        case "<":
                                         argument = {
                                                 "type"  : this.current.type,
                                                 "value" : ">"
                                         }
-                                }
-                                else if(this.current.value == ">") {
+                                        break;
+                                        case ">":
                                         argument = {
                                                 "type"  : this.current.type,
                                                 "value" : "<"
                                         }
-                                }
-                                else if(this.current.value == "<=") {
+                                        break;
+                                        case "<=":
                                         argument = {
                                                 "type"  : this.current.type,
                                                 "value" : ">="
                                         }
-                                }
-                                else if(this.current.value == ">=") {
+                                        break;
+                                        case ">=":
                                         argument = {
                                                 "type"  : this.current.type,
                                                 "value" : "<="
                                         }
-                                }
-                                else {
+                                        break;
+                                        default:
                                         argument = {
                                                 "type"  : this.current.type,
                                                 "value" : this.current.value
                                         }
+
                                 }
                                 argument_list.push(argument);
                                 break;
@@ -1623,8 +1647,60 @@ class Parser {
                 if(argument_list.length != 0) {
                         // Some stuff for the getExpression call
                         if(this.getExpression(scope, argument_list)) return true;
-
                         // We really need to do a check on the build expression
+                        // Lets comb though the list an ensure types
+                        // 1) If an arithmatic operator is present, a integer or float needs to be present upon either side of the operator
+                        // 2) AND, OR, and NOT must have only type INTEGER or BOOLEAN present within the list
+                        // 3) <,<=,>,>=, must have something on both sides of the operator
+                        let exop = false;
+                        for (let index in this.expression_result) {
+                                let i = parseInt(index,10);
+                                argument = this.expression_result[i];
+                                if(argument.type == "FACTOR" || argument.type == "AROP" || argument.type == "RLOP") {
+                                        if(typeof this.expression_result[i - 1] == 'undefined' || this.expression_result[i - 1] == null
+                                        || typeof this.expression_result[i + 1] == 'undefined' || this.expression_result[i + 1] == null) {
+                                                this.postError("Expected arguments on either side of " + argument.value + ".");
+                                                return true;
+                                        }
+                                        if(!(this.expression_result[i - 1].type == "INTEGER" || this.expression_result[i - 1].type == "FLOAT")
+                                        || !(this.expression_result[i + 1].type == "INTEGER" || this.expression_result[i + 1].type == "FLOAT")) {
+                                                this.postError("Expected arguments of type INTEGER or FLOAT on either side of " + argument.value + ".");
+                                                return true;
+                                        }
+                                }
+                                else if(argument.type == "EXOP") {
+                                        // We need to check both sides, I will check left and then set a bool for the rest of right
+                                        let reverse_index = i;
+                                        let temp_argument = null;
+                                        exop = true;
+                                        reverse_index = reverse_index - 1;
+                                        while(reverse_index != -1) {
+                                                temp_argument = this.expression_result[reverse_index];
+                                                if(temp_argument.type == "EXOP") break; // Means we have already gone back thus far
+                                                if(!(temp_argument.type == "FACTOR" || temp_argument.type == "AROP" || temp_argument.type == "RLOP")
+                                                && (temp_argument.type != "INTEGER")) {
+                                                        this.postError("Expected only type INTEGER or BOOL in expression.");
+                                                        return true;
+                                                }
+
+                                                reverse_index = reverse_index - 1;
+                                        }
+
+                                }
+                                else {
+                                        if(exop && argument.type != "INTEGER") {
+                                                this.postError("Expected only type INTEGER or BOOL in expression.");
+                                                return true;
+                                        }
+                                        if(i != (this.expression_result.length - 1)) {
+                                                if(!(this.expression_result[i + 1].type == "RLOP" || this.expression_result[i + 1].type == "EXOP" 
+                                                || this.expression_result[i + 1].type == "AROP" || this.expression_result[i + 1].type == "FACTOR")) {
+                                                        this.postError("Expected operator between two arguments.");
+                                                        return true;
+                                                }
+                                        }
+                                }
+                        }
                         return false;
                 }
                 else return false;
@@ -2044,7 +2120,7 @@ class Parser {
         postError(message) {
                 messanger.flag = true;
                 messanger.message = message;
-                messanger.line = this.current.line + 1;
+                messanger.line = this.current.line;
                 messanger.putError();
 
                 console.log("DUMP");
@@ -2569,8 +2645,8 @@ class Code {
                         let operation = operations[index]
                         switch(operation.type) {
                                 case Operation.Types.assignment:
-                                console.log("Caught assignment.");
-                                console.log(operation);
+                                // console.log("Caught assignment.");
+                                // console.log(operation);
                                 // Do the expression analysis
                                 this.writeExpression(operation.expression);
 
@@ -2591,36 +2667,36 @@ class Code {
                                 if(!r0) {
                                         // We have to take in the first argument as r1
                                         // Store R1
-                                        console.log("STORING IN R1: " + expression[index].value);
+                                        // console.log("STORING IN R1: " + expression[index].value);
                                         index = index - 1;
                                         // Store the operator
                                         operation = expression[index].value;
-                                        console.log("SAVING IN OPERATOR: " + operation);
+                                        // console.log("SAVING IN OPERATOR: " + operation);
                                         index = index - 1;
                                         // Store next value in R2
-                                        console.log("STORING IN R2: " + expression[index].value);
+                                        // console.log("STORING IN R2: " + expression[index].value);
                                         index = index - 1;
                                         // Compute and store in R0
-                                        console.log("COMPUTE. ");
-                                        console.log("STORE RESULT INTO R0.");
+                                        // console.log("COMPUTE. ");
+                                        // console.log("STORE RESULT INTO R0.");
                                         r0 = true;
                                 }
                                 else {
                                         // LOAD R1 with result
-                                        console.log("LOADING IN R1: " + "R0");
+                                        // console.log("LOADING IN R1: " + "R0");
 
                                         // Store the operator
                                         operation = expression[index].value;
-                                        console.log("SAVING IN OPERATOR: " + operation);
+                                        // console.log("SAVING IN OPERATOR: " + operation);
                                         index = index - 1;
 
                                         // Store next value in R2
-                                        console.log("STORING IN R2: " + expression[index].value);
+                                        // console.log("STORING IN R2: " + expression[index].value);
                                         index = index - 1;
                                         
                                         // Compute and store in R0
-                                        console.log("COMPUTE. ");
-                                        console.log("STORE RESULT INTO R0.");
+                                        // console.log("COMPUTE. ");
+                                        // console.log("STORE RESULT INTO R0.");
                                         r0 = true;
                                 }
                         }
