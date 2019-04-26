@@ -1006,7 +1006,7 @@ class Parser {
                                 let x_type = this.symbol_table[temp_scope][this.current_identifier].type;       // The result
                                 let y_type = this.expression_result[this.expression_result.length - 1].type;    // Litterally just grab one
 
-                                // Type check
+                                // Type check BRB
                                 if(this.typeCheck(x_type,y_type)) return true;
 
                                 // We expect the end line character
@@ -1330,6 +1330,7 @@ class Parser {
                                 
                                 //#region -> INDENTIFIER
                                 case "IDEN":
+                                
                                 if(this.next.value == ":") {
                                         // Holy fuck back up bro
                                         this.tokens.unshift(this.next);
@@ -1595,29 +1596,9 @@ class Parser {
                                         this.postError("Unexpected equals sign within expression.");
                                         return true;
                                         case "<":
-                                        argument = {
-                                                "type"  : this.current.type,
-                                                "value" : ">"
-                                        }
-                                        break;
                                         case ">":
-                                        argument = {
-                                                "type"  : this.current.type,
-                                                "value" : "<"
-                                        }
-                                        break;
                                         case "<=":
-                                        argument = {
-                                                "type"  : this.current.type,
-                                                "value" : ">="
-                                        }
-                                        break;
                                         case ">=":
-                                        argument = {
-                                                "type"  : this.current.type,
-                                                "value" : "<="
-                                        }
-                                        break;
                                         default:
                                         argument = {
                                                 "type"  : this.current.type,
@@ -1653,6 +1634,7 @@ class Parser {
                         // 2) AND, OR, and NOT must have only type INTEGER or BOOLEAN present within the list
                         // 3) <,<=,>,>=, must have something on both sides of the operator
                         let exop = false;
+                        let float = false;
                         for (let index in this.expression_result) {
                                 let i = parseInt(index,10);
                                 argument = this.expression_result[i];
@@ -1663,7 +1645,8 @@ class Parser {
                                                 return true;
                                         }
                                         if(!(this.expression_result[i - 1].type == "INTEGER" || this.expression_result[i - 1].type == "FLOAT")
-                                        || !(this.expression_result[i + 1].type == "INTEGER" || this.expression_result[i + 1].type == "FLOAT")) {
+                                        || !(this.expression_result[i + 1].type == "INTEGER" || this.expression_result[i + 1].type == "FLOAT") ||
+                                        (this.expression_result[i + 1].type == "STRING" || this.expression_result[i - 1].type == "STRING")) {
                                                 this.postError("Expected arguments of type INTEGER or FLOAT on either side of " + argument.value + ".");
                                                 return true;
                                         }
@@ -1682,7 +1665,6 @@ class Parser {
                                                         this.postError("Expected only type INTEGER or BOOL in expression.");
                                                         return true;
                                                 }
-
                                                 reverse_index = reverse_index - 1;
                                         }
 
@@ -1703,7 +1685,9 @@ class Parser {
                         }
                         return false;
                 }
-                else return false;
+                else {
+                        return false;
+                }
         };
         postProcedure(scope, list) {
                 
@@ -1769,64 +1753,11 @@ class Parser {
 
                 // Ok lets save the current and previous types
                 // Alright lets build the expression list
-                // Do all the 
-                // Do everything in parenthesis first
+                // Ok, next up is expressional operators
                 let temp_array = [];
                 var x = null;
                 var y = null;
                 var temp = null;
-                let bracket_count = 0;
-                while(1) {
-                        // Grab the next value
-                        temp = argument_list.shift();
-                        
-                        // Check if it is time to quit
-                        if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
-                        
-                        // See if we have found a parenthesis
-                        if(temp.value == "(") {
-                                bracket_count = bracket_count + 1;
-                                let x_array = [];
-                                temp = argument_list.shift();
-                                while(1) {
-                                        if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
-                                        if(temp.value == "(") bracket_count = bracket_count + 1;
-                                        if(temp.value == ")") {
-                                                bracket_count = bracket_count - 1;
-                                                if(bracket_count == 0) break;
-                                        }
-                                        x_array.push(temp);
-                                        temp = argument_list.shift();
-                                }
-
-                                if(temp == "undefined" || typeof temp === 'undefined' || temp == null) {
-                                        this.postError("Unbalanced parenthesis.");
-                                        return true;
-                                }
-
-                                if(x_array.length != 0) {
-                                        if(this.getExpression(scope,x_array)) return true;
-                                        // Snap the old shit back onto the end
-                                        while(1) {
-                                                temp = temp_array.pop();
-                                                if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
-                                                this.expression_result.unshift(temp);
-                                        }
-                                }
-                        }
-                        else {
-                                // Else push the temp
-                                temp_array.push(temp);
-                        }
-                }
-
-                // Ok, next up is expressional operators
-                if(temp_array.length == 0) return false;
-                argument_list = temp_array;
-                temp_array = [];
-                x = null;
-                y = null;
-                temp = null;
                 while(1) {
                         // Grab the next value
                         temp = argument_list.shift();
@@ -1842,7 +1773,7 @@ class Parser {
 
                                 while(1) {
                                         if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
-                                        x_array.push(temp);
+                                        x_array.unshift(temp);
                                         temp = temp_array.pop();
                                 }
 
@@ -1905,7 +1836,7 @@ class Parser {
 
                                 while(1) {
                                         if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
-                                        x_array.push(temp);
+                                        x_array.unshift(temp);
                                         temp = temp_array.pop();
                                 }
 
@@ -1946,6 +1877,59 @@ class Parser {
                         }
                 }
 
+                // Do everything in parenthesis first
+                if(temp_array.length == 0) return false;
+                argument_list = temp_array;
+                temp_array = [];
+                x = null;
+                y = null;
+                temp = null;
+                let bracket_count = 0;
+                while(1) {
+                        // Grab the next value
+                        temp = argument_list.shift();
+                        
+                        // Check if it is time to quit
+                        if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
+                        
+                        // See if we have found a parenthesis
+                        if(temp.value == "(") {
+                                bracket_count = bracket_count + 1;
+                                let x_array = [];
+                                temp = argument_list.shift();
+                                while(1) {
+                                        if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
+                                        if(temp.value == "(") bracket_count = bracket_count + 1;
+                                        if(temp.value == ")") {
+                                                bracket_count = bracket_count - 1;
+                                                if(bracket_count == 0) break;
+                                        }
+                                        x_array.push(temp);
+                                        temp = argument_list.shift();
+                                }
+
+                                if(temp == "undefined" || typeof temp === 'undefined' || temp == null) {
+                                        this.postError("Unbalanced parenthesis.");
+                                        return true;
+                                }
+
+                                if(x_array.length != 0) {
+                                        if(this.getExpression(scope,x_array)) return true;
+                                        // Snap the old shit back onto the end
+                                        while(1) {
+                                                temp = temp_array.pop();
+                                                if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
+                                                this.expression_result.unshift(temp);
+                                        }
+                                }
+                        }
+                        else {
+                                // Else push the temp
+                                temp_array.push(temp);
+                        }
+                }
+                
+
                 // Before arithmatic and factors, ensure the array is warm enough for them
                 if(temp_array.length == 0) return false;
                 argument_list = temp_array;
@@ -1960,156 +1944,6 @@ class Parser {
                         temp = argument_list.shift();
                         this.expression_result.unshift(temp);
                 }
-
-                
-
-
-                // // Do the factors
-                // temp_array = [];
-                // var x = null;
-                // var y = null;
-                // var temp = null;
-                // let first = true;
-                // while(1) {
-                //         // Grab the next value
-                //         temp = argument_list.shift();
-                        
-                //         // Check if it is time to quit
-                //         if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
-                        
-                //         // See if we have found a FACTOR
-                //         if(temp.type == "FACTOR") {
-                //                 // Grab a new x value
-                //                 // if(!first) {
-                //                 //         x = this.expression_result[0];
-                //                 // }
-                //                 // else {
-                //                 //         x = this.expression_result[this.expression_result.length - 1];
-                //                 // }
-
-                //                 x = this.expression_result[this.expression_result.length - 1];
-
-
-                //                 if(x == "undefined" || typeof x === 'undefined' || x == null) {
-                //                         this.postError("Unbalanced expression statement.");
-                //                         return true;
-                //                 }
-                //                 y = argument_list.shift();
-                //                 //Grab a new y value
-                //                 if(y == "undefined" || typeof y === 'undefined' || y == null) {
-                //                         this.postError("Unbalanced expression statement.");
-                //                         return true;
-                //                 }
-                //                 if(y.type == "STRING" || x.type == "STRING") {
-                //                         this.postError("String is unsupported with arithmatic operations.");
-                //                         return true 
-                //                 }
-
-                //                 // Check if it is two array AROP
-                //                 if(x.value == "IDEN" && y.value == "IDEN") {
-                //                         if(x.index == -1 && y.index == -1) {
-                //                                 if(x.bound != y.bound) {
-                //                                         this.postError("Cannot assignment array size " + x.bound + " to array size " + y_bound + ".");
-                //                                         return true;
-                //                                 }
-                //                         }
-                //                 }
-
-                //                 // Check if either are undefined
-                //                 if((x == "undefined" || typeof x == 'undefined' || x == null) || 
-                //                 (y == "undefined" || typeof y == 'undefined' || y == null)) {
-                //                         this.postError("Invalid variable type on operation " + temp.value + ".");
-                //                         return true;
-                //                 }
-
-                //                 // Type check
-                //                 if(this.typeCheck(x.type,y.type)) return true;
-                //                 if(first) first = false;
-                //                 this.expression_result.push(temp);
-                //                 this.expression_result.push(y);
-                //         }
-                //         else {
-                //                 // Else push the temp
-                //                 temp_array.push(temp);
-                //         }
-                // }
-
-                // // Before arithmatic and factors, ensure the array is warm enough for them
-                // if(temp_array.length == 0) return false;
-                // argument_list = temp_array;
-
-                // if(this.expression_result.length == 0) {
-                //         this.expression_result[0] = argument_list.shift();
-                // }
-
-                // // Do the last arithmatic operators
-                // argument_list = temp_array;
-                // temp_array = [];
-                // var x = null;
-                // var y = null;
-                // var temp = null;
-                // first = true;
-                // while(1) {
-                //         // Grab the next value
-                //         temp = argument_list.shift();
-
-                //         // Check if it is time to quit
-                //         if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
-                        
-                //         // See if we have found a FACTOR
-                //         if(temp.type == "AROP") {
-                //                 // Grab a new x value
-                //                 // Grab a new x value
-                //                 // if(!first) {
-                //                 //         x = this.expression_result[0];
-                //                 // }
-                //                 // else {
-                //                 //         x = this.expression_result[this.expression_result.length - 1];
-                //                 // }
-
-                //                 x = this.expression_result[this.expression_result.length - 1];
-
-                //                 y = argument_list.shift();
-
-                //                 if(x == "undefined" || typeof x === 'undefined' || x == null) {
-                //                         this.postError("Unbalanced expression statement.");
-                //                         return true;
-                //                 }
-                //                 //Grab a new y value
-                //                 if(y == "undefined" || typeof y === 'undefined' || y == null) {
-                //                         this.postError("Unbalanced expression statement.");
-                //                         return true;
-                //                 }
-
-                //                 // Check if it is two array AROP
-                //                 if(x.value == "IDEN" && y.value == "IDEN") {
-                //                         if(x.index == -1 && y.index == -1) {
-                //                                 if(x.bound != y.bound) {
-                //                                         this.postError("Cannot assignment array size " + x.bound + " to array size " + y_bound + ".");
-                //                                         return true;
-                //                                 }
-                //                         }
-                //                 }
-
-                //                 // Check if either are undefined
-                //                 if((x == "undefined" || typeof x == 'undefined' || x == null) || 
-                //                 (y == "undefined" || typeof y == 'undefined' || y == null)) {
-                //                         this.postError("Invalid variable type on operation " + temp.value + ".");
-                //                         return true;
-                //                 }
-
-                //                 // Type check
-                //                 if(this.typeCheck(x.type,y.type)) return true;
-                //                 if(first) first = false;
-                //                 this.expression_result.unshift(temp);
-                //                 this.expression_result.unshift(y);
-                                
-                //         }
-                //         else {
-                //                 // Else push the temp
-                //                 this.expression_result.unshift(temp);
-                //         }
-                // }
 
                 // Make the next call if it is needed
                 if(argument_list.length != 0) {
@@ -2296,6 +2130,11 @@ class Parser {
                                 return true;
                         }
                 }
+                else if((type1 == "STRING" && type2 != "STRING") || (type1 != "STRING" && type2 == "STRING")) {
+                        this.postError("Incompatible type " + type1 + " and " + type2);
+                        return true;
+                }
+                else if(type1 == "STRING" && type2 == "STRING") return false;
                 else {
                         this.postError("Incompatible type " + type1 + " and " + type2);
                         return true;
@@ -2645,8 +2484,6 @@ class Code {
                         let operation = operations[index]
                         switch(operation.type) {
                                 case Operation.Types.assignment:
-                                // console.log("Caught assignment.");
-                                // console.log(operation);
                                 // Do the expression analysis
                                 this.writeExpression(operation.expression);
 
@@ -2657,7 +2494,12 @@ class Code {
         }
 
         writeExpression(expression) {
-
+                /* The plan stan */
+                // 1) Do all multiplication and division
+                // 2) Do all addition and subrtaction
+                // 3) Resolve relational operators
+                // 4) Resolve expressional operators
+                console.log(expression);
                 if(expression.length > 2) {
                         let operation   = null;
                         let index       = expression.length - 1;
@@ -2667,36 +2509,36 @@ class Code {
                                 if(!r0) {
                                         // We have to take in the first argument as r1
                                         // Store R1
-                                        // console.log("STORING IN R1: " + expression[index].value);
+                                        console.log("STORING IN R1: " + expression[index].value);
                                         index = index - 1;
                                         // Store the operator
                                         operation = expression[index].value;
-                                        // console.log("SAVING IN OPERATOR: " + operation);
+                                        console.log("SAVING IN OPERATOR: " + operation);
                                         index = index - 1;
                                         // Store next value in R2
-                                        // console.log("STORING IN R2: " + expression[index].value);
+                                        console.log("STORING IN R2: " + expression[index].value);
                                         index = index - 1;
                                         // Compute and store in R0
-                                        // console.log("COMPUTE. ");
-                                        // console.log("STORE RESULT INTO R0.");
+                                        console.log("COMPUTE. ");
+                                        console.log("STORE RESULT INTO R0.");
                                         r0 = true;
                                 }
                                 else {
                                         // LOAD R1 with result
-                                        // console.log("LOADING IN R1: " + "R0");
+                                        console.log("LOADING IN R1: " + "R0");
 
                                         // Store the operator
                                         operation = expression[index].value;
-                                        // console.log("SAVING IN OPERATOR: " + operation);
+                                        console.log("SAVING IN OPERATOR: " + operation);
                                         index = index - 1;
 
                                         // Store next value in R2
-                                        // console.log("STORING IN R2: " + expression[index].value);
+                                        console.log("STORING IN R2: " + expression[index].value);
                                         index = index - 1;
                                         
                                         // Compute and store in R0
-                                        // console.log("COMPUTE. ");
-                                        // console.log("STORE RESULT INTO R0.");
+                                        console.log("COMPUTE. ");
+                                        console.log("STORE RESULT INTO R0.");
                                         r0 = true;
                                 }
                         }
@@ -2976,7 +2818,6 @@ class Code {
         }
 
         defineProcedures(scope) {
-                // console.log(scope);
                 for(let index in scope) {
                         if(!(typeof this.procedures[index] == 'undefined' || this.procedures[index] == null)) {
                                 if(this.procedures[index].used && this.procedures[index]["printed"] == false) {
@@ -3167,7 +3008,6 @@ function main(data) {
                 var generator = new Code(parser.program, parser.symbol_table, parser.procedure_table);
                 generator.generateCode();                       // Generate the code
                 messanger.program.code = generator.code;
-                // console.log(generator.table);
         }
         //#endregion
 
