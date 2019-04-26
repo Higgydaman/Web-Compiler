@@ -1124,6 +1124,7 @@ class Parser {
 
                 // Get the expression
                 if(this.postExpression(scope)) return true;
+                console.log(this.expression_result);
 
                 if(this.expression_result.length == 0) {
                         this.postError("Expected an expression for IF statement.");
@@ -1745,6 +1746,9 @@ class Parser {
                 this.next = this.tokens.shift();
         };
         getExpression(scope, argument_list) {
+                // for(let index in argument_list) {
+                //         console.log(argument_list[index]);
+                // }
 
                 if(argument_list.length == 1) {
                         this.expression_result.unshift(argument_list[0]);
@@ -1769,10 +1773,19 @@ class Parser {
                         if(temp.value == "&" || temp.value == "|") {
                                 let x_array = [];
                                 let exop = temp;
+                                let bracket_count = 0;
                                 temp = temp_array.pop();
 
                                 while(1) {
-                                        if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
+                                        if(temp == "undefined" || typeof temp === 'undefined' || temp == null) {
+                                                temp = {
+                                                        "type"  : "BRKT",
+                                                        "value" : ")"
+                                                }
+                                                for(let i = 1; i <= bracket_count; i = i + 1) x_array.push(temp);
+                                                break;
+                                        }
+                                        if(temp.value == "(") bracket_count = bracket_count + 1; 
                                         x_array.unshift(temp);
                                         temp = temp_array.pop();
                                 }
@@ -1791,10 +1804,19 @@ class Parser {
                                 }
 
                                 x_array = [];
+                                bracket_count = 0;
                                 temp = argument_list.shift();
 
                                 while(1) {
-                                        if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
+                                        if(temp == "undefined" || typeof temp === 'undefined' || temp == null) {
+                                                temp = {
+                                                        "type"  : "BRKT",
+                                                        "value" : "("
+                                                }
+                                                for(let i = 1; i <= bracket_count; i = i + 1) x_array.unshift(temp);
+                                                break;
+                                        }
+                                        if(temp.value == ")") bracket_count = bracket_count + 1;
                                         x_array.push(temp);
                                         temp = argument_list.shift();
                                 }
@@ -1832,10 +1854,19 @@ class Parser {
                         if(temp.type == "RLOP") {
                                 let x_array = [];
                                 let rlop = temp;
+                                let bracket_count = 0;
                                 temp = temp_array.pop();
 
                                 while(1) {
-                                        if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
+                                        if(temp == "undefined" || typeof temp === 'undefined' || temp == null) {
+                                                temp = {
+                                                        "type"  : "BRKT",
+                                                        "value" : ")"
+                                                }
+                                                for(let i = 1; i <= bracket_count; i = i + 1) x_array.push(temp);
+                                                break;
+                                        }
+                                        if(temp.value == "(") bracket_count = bracket_count + 1; 
                                         x_array.unshift(temp);
                                         temp = temp_array.pop();
                                 }
@@ -1855,9 +1886,18 @@ class Parser {
 
                                 x_array = [];
                                 temp = argument_list.shift();
+                                bracket_count = 0;
 
                                 while(1) {
-                                        if(temp == "undefined" || typeof temp === 'undefined' || temp == null) break;
+                                        if(temp == "undefined" || typeof temp === 'undefined' || temp == null) {
+                                                temp = {
+                                                        "type"  : "BRKT",
+                                                        "value" : "("
+                                                }
+                                                for(let i = 1; i <= bracket_count; i = i + 1) x_array.unshift(temp);
+                                                break;
+                                        }
+                                        if(temp.value == ")") bracket_count = bracket_count + 1;
                                         x_array.push(temp);
                                         temp = argument_list.shift();
                                 }
@@ -1933,10 +1973,6 @@ class Parser {
                 // Before arithmatic and factors, ensure the array is warm enough for them
                 if(temp_array.length == 0) return false;
                 argument_list = temp_array;
-
-                // if(this.expression_result.length == 0) {
-                //         this.expression_result[0] = argument_list.shift();
-                // }
 
                 // For the rest of the time, just push that shit on the stack
                 let length = argument_list.length
@@ -2499,7 +2535,7 @@ class Code {
                 // 2) Do all addition and subrtaction
                 // 3) Resolve relational operators
                 // 4) Resolve expressional operators
-                console.log(expression);
+                // console.log(expression);
                 if(expression.length > 2) {
                         let operation   = null;
                         let index       = expression.length - 1;
@@ -2509,36 +2545,36 @@ class Code {
                                 if(!r0) {
                                         // We have to take in the first argument as r1
                                         // Store R1
-                                        console.log("STORING IN R1: " + expression[index].value);
+                                        //console.log("STORING IN R1: " + expression[index].value);
                                         index = index - 1;
                                         // Store the operator
                                         operation = expression[index].value;
-                                        console.log("SAVING IN OPERATOR: " + operation);
+                                        //console.log("SAVING IN OPERATOR: " + operation);
                                         index = index - 1;
                                         // Store next value in R2
-                                        console.log("STORING IN R2: " + expression[index].value);
+                                        //console.log("STORING IN R2: " + expression[index].value);
                                         index = index - 1;
                                         // Compute and store in R0
-                                        console.log("COMPUTE. ");
-                                        console.log("STORE RESULT INTO R0.");
+                                        //console.log("COMPUTE. ");
+                                        //console.log("STORE RESULT INTO R0.");
                                         r0 = true;
                                 }
                                 else {
                                         // LOAD R1 with result
-                                        console.log("LOADING IN R1: " + "R0");
+                                        //console.log("LOADING IN R1: " + "R0");
 
                                         // Store the operator
                                         operation = expression[index].value;
-                                        console.log("SAVING IN OPERATOR: " + operation);
+                                        //console.log("SAVING IN OPERATOR: " + operation);
                                         index = index - 1;
 
                                         // Store next value in R2
-                                        console.log("STORING IN R2: " + expression[index].value);
+                                        //console.log("STORING IN R2: " + expression[index].value);
                                         index = index - 1;
                                         
                                         // Compute and store in R0
-                                        console.log("COMPUTE. ");
-                                        console.log("STORE RESULT INTO R0.");
+                                        //console.log("COMPUTE. ");
+                                        //console.log("STORE RESULT INTO R0.");
                                         r0 = true;
                                 }
                         }
