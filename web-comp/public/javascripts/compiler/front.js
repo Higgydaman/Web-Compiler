@@ -525,7 +525,9 @@ class Parser {
                 //#endregion
                 
                 //#region -> Get an operation
-                if(this.getOperation("program")) return true;   // Call the operation function
+                if(this.getOperation("program")) {      // Call the operation function
+                        if(this.recover()) return true; // See if we cant scrape up some more parse work on error                  
+                }
                 if(this.operation.type == Operation.Types.start) {
                         this.program.name = this.operation.value;
                 }
@@ -577,6 +579,44 @@ class Parser {
         //#endregion
 
         //#region -> Parsing utilities
+        recover() {
+                if(this.getToken()) return true;
+                switch(this.next.value) {
+                        case "GLOBAL":
+                        case "VARIABLE":
+                        case "PROCEDURE":
+                        this.state = States.declaration;
+                        return false;
+                        case ";":
+                        if(this.getToken()) return true;
+                        switch(this.state) {
+                                case States.start:
+                                this.state = States.declaration;
+                                break;
+                                case States.declaration:
+                                if(this.next.type == "IDEN" || this.next.type == "GOTO" || this.next.type == "LOOP" || this.next.type == "COND") {
+                                        this.state = States.statement;
+                                }
+                                break;
+                                case States.statement:
+                                break;
+                                case States.end:
+                                return true;
+                                break;
+                                case States.Procedure.declaration:
+                                this.state = States.declaration;
+                                break;
+                                case States.Procedure.statement:
+                                this.state = States.statement;
+                                break;
+                        }
+                        return false;
+                        case "EOF":
+                        return true;
+                        default:
+                        return this.recover();
+                }
+        }
         getStart() {
                 // Standard start
                 if(this.getToken()) return true;
@@ -1786,6 +1826,7 @@ class Parser {
                                                 break;
                                         }
                                         if(temp.value == "(") bracket_count = bracket_count + 1; 
+                                        if(temp.value == ")") bracket_count = bracket_count - 1; 
                                         x_array.unshift(temp);
                                         temp = temp_array.pop();
                                 }
@@ -1817,6 +1858,7 @@ class Parser {
                                                 break;
                                         }
                                         if(temp.value == ")") bracket_count = bracket_count + 1;
+                                        else if(temp.value == "(") bracket_count = bracket_count - 1;
                                         x_array.push(temp);
                                         temp = argument_list.shift();
                                 }
@@ -1867,6 +1909,7 @@ class Parser {
                                                 break;
                                         }
                                         if(temp.value == "(") bracket_count = bracket_count + 1; 
+                                        if(temp.value == ")") bracket_count = bracket_count - 1;
                                         x_array.unshift(temp);
                                         temp = temp_array.pop();
                                 }
@@ -1898,6 +1941,7 @@ class Parser {
                                                 break;
                                         }
                                         if(temp.value == ")") bracket_count = bracket_count + 1;
+                                        if(temp.value == "(") bracket_count = bracket_count - 1;
                                         x_array.push(temp);
                                         temp = argument_list.shift();
                                 }
@@ -3037,6 +3081,7 @@ function main(data) {
         parser.parseTokens();           // Parse the tokens
         messanger.program.name = parser.program.name;   
         messanger.program.parser_ops = parser.program;
+        console.log(messanger.data);
         //#endregion
 
         //#region -> STEP 4: Generate code

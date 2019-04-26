@@ -9,6 +9,7 @@ document.getElementById("Scanner").addEventListener("click", switch_toScanner);
 document.getElementById("Parser").addEventListener("click", switch_toParser);
 document.getElementById("Code").addEventListener("click", switch_toCode);
 document.getElementById("Language").addEventListener("click", switch_toLanguage);
+document.getElementById("Errors").addEventListener("click", switch_toErrors);
 
 Types = {
     "start"         : 1,
@@ -155,12 +156,14 @@ function switch_toCode() {
     state = "CODE";
     if(front_message != null) printResult();
 }
-
 function switch_toLanguage() {
     state = "LANGUAGE";
     if(front_message != null) printResult();
 }
-
+function switch_toErrors() {
+    state = "ERRORS";
+    if(front_message != null) printResult();
+}
 var front_message = null;
 front_end.onmessage = function(e) {
     // See where the error is
@@ -169,17 +172,24 @@ front_end.onmessage = function(e) {
 
     editor.getSession().clearAnnotations();
     if(e.data.error == true) {
-        var length = e.data.list.length - 1;
-        var i = 0;
-        while(i <= length) {
-            editor.getSession().setAnnotations([{
-                row: e.data.list[i].line,
-                column: 1,
-                text: e.data.list[i].msg,
-                type: "error"
-            }]);
-            i = i + 1;
-        }
+        editor.getSession().setAnnotations([{
+            row: e.data.list[0].line,
+            column: 1,
+            text: e.data.list[0].msg,
+            type: "error"
+        }]);
+        // var length = e.data.list.length;
+        // var i = 0;
+        // while(i < length) {
+        //     console.log(e.data.list[i].line + 1);
+        //     editor.getSession().setAnnotations([{
+        //         row: e.data.list[i].line,
+        //         column: 1,
+        //         text: e.data.list[i].msg,
+        //         type: "error"
+        //     }]);
+        //     i = i + 1;
+        // }
     }
 
     printResult();
@@ -202,6 +212,13 @@ function printResult() {
         print_result = " << CODE OUTPUT >> \n";
         front_message.program.code.forEach(function(line) {
             print_result = print_result + line + "\n";
+        });
+        break;
+        case "ERRORS":
+        print_result = " << ERROR REPORT >> \n";
+        console.log(front_message);
+        front_message.list.forEach(function(error) {
+            print_result = print_result + "LINE " + error.line + ":" + error.msg + "\n";
         });
         break;
         case "LANGUAGE":
@@ -343,6 +360,7 @@ function printResult() {
 function setupEditor() {
     window.editor = ace.edit("editor");
     window.result = ace.edit("result");
+    editor.setOption("useWorker", true);
     editor.setTheme("ace/theme/chaos");
     result.setTheme("ace/theme/cobalt");
     editor.getSession().on('change', function(data) {
